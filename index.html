@@ -16,6 +16,7 @@
       --danger:#b91c1c;
       --success:#166534;
       --warning:#92400e;
+      --soft:#eef2ff;
     }
     *{box-sizing:border-box}
     body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
@@ -53,7 +54,7 @@
     th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
     th{font-size:12px;color:var(--muted);text-transform:uppercase}
     .table-wrap{overflow:auto}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2ff;font-size:12px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--soft);font-size:12px}
     .metric{border:1px solid var(--border);border-radius:14px;padding:14px}
     .metric .value{font-size:24px;font-weight:700;margin-top:6px}
     .login-wrap{max-width:430px;margin:40px auto}
@@ -144,18 +145,34 @@
 
       <div id="clients" class="section">
         <div class="card">
-          <h2>Clienti</h2>
-          <div class="grid grid-3">
+          <div class="row" style="justify-content:space-between">
+            <div>
+              <h2>Clienti</h2>
+              <p class="muted">Crea o modifica i clienti in modo stabile.</p>
+            </div>
+            <div id="clientModeBadge" class="pill">Nuovo cliente</div>
+          </div>
+
+          <div class="grid grid-3" style="margin-top:12px;">
             <input id="clientName" placeholder="Nome / Ragione sociale" />
-            <select id="clientType"><option value="azienda">Azienda</option><option value="privato">Privato</option></select>
+            <select id="clientType">
+              <option value="azienda">Azienda</option>
+              <option value="privato">Privato</option>
+            </select>
             <input id="clientPhone" placeholder="Telefono" />
             <input id="clientVat" placeholder="Partita IVA" />
             <input id="clientAddress" placeholder="Indirizzo" />
             <input id="clientSdi" placeholder="SDI" />
           </div>
-          <div class="row" style="margin-top:12px"><button id="saveClientBtn" type="button">Salva cliente</button></div>
+
+          <div class="row" style="margin-top:12px;">
+            <button id="saveClientBtn" type="button">Salva cliente</button>
+            <button id="cancelClientEditBtn" type="button" class="secondary">Annulla modifica</button>
+          </div>
+
           <div id="clientStatus" class="status"></div>
         </div>
+
         <div class="card">
           <div class="table-wrap">
             <table>
@@ -383,6 +400,7 @@
     let editingClientId = null;
     let editingSupplierId = null;
     let editingArticleId = null;
+    let isSavingClient = false;
 
     function setStatus(id, text, type = "") {
       const el = document.getElementById(id);
@@ -424,23 +442,16 @@
 
     async function ensureProfile(user) {
       try {
-        const { data: existing } = await supabaseClient
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle();
-
+        const { data: existing } = await supabaseClient.from("profiles").select("*").eq("id", user.id).maybeSingle();
         if (existing) {
           state.profile = existing;
           return;
         }
-
         const { data: inserted } = await supabaseClient
           .from("profiles")
           .insert({ id: user.id, email: user.email, role: "staff" })
           .select("*")
           .single();
-
         state.profile = inserted || { id: user.id, email: user.email, role: "staff" };
       } catch {
         state.profile = { id: user.id, email: user.email, role: "staff" };
@@ -483,19 +494,16 @@
       try {
         const email = document.getElementById("loginEmail").value.trim();
         const password = document.getElementById("loginPassword").value;
-
         const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (error) {
           setStatus("authStatus", error.message, "error");
           return;
         }
-
         const { data } = await supabaseClient.auth.getSession();
         if (!data?.session) {
           setStatus("authStatus", "Sessione non trovata dopo il login.", "error");
           return;
         }
-
         state.session = data.session;
         await afterLogin();
         setStatus("authStatus", "Login effettuato.", "ok");
@@ -583,6 +591,29 @@
     async function loadPurchaseRowsHistory() {
       const { data } = await supabaseClient.from("purchase_history_rows").select("*").order("created_at", { ascending: false });
       state.purchaseRowsHistory = data || [];
+    }
+
+    function resetClientForm() {
+      editingClientId = null;
+      isSavingClient = false;
+      document.getElementById("clientName").value = "";
+      document.getElementById("clientType").value = "azienda";
+      document.getElementById("clientPhone").value = "";
+      document.getElementById("clientVat").value = "";
+      document.getElementById("clientAddress").value = "";
+      document.getElementById("clientSdi").value = "";
+      document.getElementById("saveClientBtn").disabled = false;
+      document.getElementById("saveClientBtn").textContent = "Salva cliente";
+      document.getElementById("clientModeBadge").textContent = "Nuovo cliente";
+    }
+
+    function fillClientForm(client) {
+      document.getElementById("clientName").value = client.name || "";
+      document.getElementById("clientType").value = client.type || "azienda";
+      document.getElementById("clientPhone").value = client.phone || "";
+      document.getElementById("clientVat").value = client.vat_number || "";
+      document.getElementById("clientAddress").value = client.address || "";
+      document.getElementById("clientSdi").value = client.sdi || "";
     }
 
     function renderAll() {
@@ -809,15 +840,15 @@
     }
 
     function editClient(id) {
-      const c = state.clients.find(x => x.id === id);
-      if (!c) return;
+      const client = state.clients.find(x => x.id === id);
+      if (!client) {
+        setStatus("clientStatus", "Cliente non trovato.", "error");
+        return;
+      }
       editingClientId = id;
-      document.getElementById("clientName").value = c.name || "";
-      document.getElementById("clientType").value = c.type || "azienda";
-      document.getElementById("clientPhone").value = c.phone || "";
-      document.getElementById("clientVat").value = c.vat_number || "";
-      document.getElementById("clientAddress").value = c.address || "";
-      document.getElementById("clientSdi").value = c.sdi || "";
+      fillClientForm(client);
+      document.getElementById("clientModeBadge").textContent = "Modifica cliente";
+      document.getElementById("saveClientBtn").textContent = "Aggiorna cliente";
       setStatus("clientStatus", "Stai modificando questo cliente.", "warn");
       switchTab("clients");
     }
@@ -855,7 +886,8 @@
     }
 
     async function saveClient() {
-      setStatus("clientStatus", "Salvataggio...");
+      if (isSavingClient) return;
+
       const payload = {
         name: document.getElementById("clientName").value.trim(),
         type: document.getElementById("clientType").value,
@@ -864,56 +896,72 @@
         address: document.getElementById("clientAddress").value.trim() || null,
         sdi: document.getElementById("clientSdi").value.trim() || null
       };
+
       if (!payload.name) {
         setStatus("clientStatus", "Inserisci il nome cliente.", "error");
         return;
       }
 
-      const result = editingClientId
-        ? await supabaseClient.from("clients").update(payload).eq("id", editingClientId).select()
-        : await supabaseClient.from("clients").insert(payload).select();
+      const isEdit = !!editingClientId;
+      isSavingClient = true;
+      document.getElementById("saveClientBtn").disabled = true;
+      setStatus("clientStatus", isEdit ? "Aggiornamento in corso..." : "Salvataggio in corso...");
 
-      if (result.error) {
-        setStatus("clientStatus", result.error.message, "error");
-        return;
+      try {
+        const result = isEdit
+          ? await supabaseClient.from("clients").update(payload).eq("id", editingClientId).select()
+          : await supabaseClient.from("clients").insert(payload).select();
+
+        if (result.error) {
+          setStatus("clientStatus", result.error.message, "error");
+          isSavingClient = false;
+          document.getElementById("saveClientBtn").disabled = false;
+          return;
+        }
+
+        await loadClients();
+        renderClients();
+        resetClientForm();
+        setStatus("clientStatus", isEdit ? "Cliente aggiornato." : "Cliente salvato.", "ok");
+      } catch (err) {
+        setStatus("clientStatus", err?.message || "Errore durante il salvataggio cliente.", "error");
+        isSavingClient = false;
+        document.getElementById("saveClientBtn").disabled = false;
       }
-
-      editingClientId = null;
-      ["clientName","clientPhone","clientVat","clientAddress","clientSdi"].forEach(id => document.getElementById(id).value = "");
-      document.getElementById("clientType").value = "azienda";
-      setStatus("clientStatus", "Cliente salvato.", "ok");
-      await loadClients();
-      renderAll();
     }
 
     async function saveSupplier() {
       setStatus("supplierStatus", "Salvataggio...");
-      const payload = {
-        name: document.getElementById("supplierName").value.trim(),
-        contact_name: document.getElementById("supplierContact").value.trim() || null,
-        phone: document.getElementById("supplierPhone").value.trim() || null,
-        email: document.getElementById("supplierEmail").value.trim() || null,
-        vat_number: document.getElementById("supplierVat").value.trim() || null
-      };
-      if (!payload.name) {
-        setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
-        return;
+      try {
+        const payload = {
+          name: document.getElementById("supplierName").value.trim(),
+          contact_name: document.getElementById("supplierContact").value.trim() || null,
+          phone: document.getElementById("supplierPhone").value.trim() || null,
+          email: document.getElementById("supplierEmail").value.trim() || null,
+          vat_number: document.getElementById("supplierVat").value.trim() || null
+        };
+        if (!payload.name) {
+          setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
+          return;
+        }
+
+        const result = editingSupplierId
+          ? await supabaseClient.from("suppliers").update(payload).eq("id", editingSupplierId).select()
+          : await supabaseClient.from("suppliers").insert(payload).select();
+
+        if (result.error) {
+          setStatus("supplierStatus", result.error.message, "error");
+          return;
+        }
+
+        editingSupplierId = null;
+        ["supplierName","supplierContact","supplierPhone","supplierEmail","supplierVat"].forEach(id => document.getElementById(id).value = "");
+        setStatus("supplierStatus", "Fornitore salvato.", "ok");
+        await loadSuppliers();
+        renderAll();
+      } catch (err) {
+        setStatus("supplierStatus", err?.message || "Errore salvataggio fornitore.", "error");
       }
-
-      const result = editingSupplierId
-        ? await supabaseClient.from("suppliers").update(payload).eq("id", editingSupplierId).select()
-        : await supabaseClient.from("suppliers").insert(payload).select();
-
-      if (result.error) {
-        setStatus("supplierStatus", result.error.message, "error");
-        return;
-      }
-
-      editingSupplierId = null;
-      ["supplierName","supplierContact","supplierPhone","supplierEmail","supplierVat"].forEach(id => document.getElementById(id).value = "");
-      setStatus("supplierStatus", "Fornitore salvato.", "ok");
-      await loadSuppliers();
-      renderAll();
     }
 
     async function saveVehicle() {
@@ -966,40 +1014,44 @@
 
     async function saveArticle() {
       setStatus("articleStatus", "Salvataggio...");
-      const payload = {
-        category: document.getElementById("articleCategory").value.trim() || "Generico",
-        code: document.getElementById("articleCode").value.trim().toUpperCase(),
-        description: document.getElementById("articleDescription").value.trim(),
-        brand: document.getElementById("articleBrand").value.trim() || null,
-        unit: document.getElementById("articleUnit").value.trim() || "pz",
-        stock: Number(document.getElementById("articleStock").value || 0),
-        min_stock: Number(document.getElementById("articleMinStock").value || 0),
-        sale_price_net: Number(document.getElementById("articleSalePrice").value || 0),
-        purchase_price_net: Number(document.getElementById("articlePurchasePrice").value || 0),
-        last_purchase_date: document.getElementById("articleLastDate").value || null,
-        last_supplier_id: document.getElementById("articleSupplier").value || null
-      };
-      if (!payload.code || !payload.description) {
-        setStatus("articleStatus", "Inserisci codice e descrizione.", "error");
-        return;
+      try {
+        const payload = {
+          category: document.getElementById("articleCategory").value.trim() || "Generico",
+          code: document.getElementById("articleCode").value.trim().toUpperCase(),
+          description: document.getElementById("articleDescription").value.trim(),
+          brand: document.getElementById("articleBrand").value.trim() || null,
+          unit: document.getElementById("articleUnit").value.trim() || "pz",
+          stock: Number(document.getElementById("articleStock").value || 0),
+          min_stock: Number(document.getElementById("articleMinStock").value || 0),
+          sale_price_net: Number(document.getElementById("articleSalePrice").value || 0),
+          purchase_price_net: Number(document.getElementById("articlePurchasePrice").value || 0),
+          last_purchase_date: document.getElementById("articleLastDate").value || null,
+          last_supplier_id: document.getElementById("articleSupplier").value || null
+        };
+        if (!payload.code || !payload.description) {
+          setStatus("articleStatus", "Inserisci codice e descrizione.", "error");
+          return;
+        }
+
+        const result = editingArticleId
+          ? await supabaseClient.from("articles").update(payload).eq("id", editingArticleId).select()
+          : await supabaseClient.from("articles").insert(payload).select();
+
+        if (result.error) {
+          setStatus("articleStatus", result.error.message, "error");
+          return;
+        }
+
+        editingArticleId = null;
+        ["articleCode","articleDescription","articleBrand","articleCategory","articleStock","articleMinStock","articleSalePrice","articlePurchasePrice","articleLastDate"].forEach(id => document.getElementById(id).value = "");
+        document.getElementById("articleUnit").value = "pz";
+        document.getElementById("articleSupplier").value = "";
+        setStatus("articleStatus", "Articolo salvato.", "ok");
+        await loadArticles();
+        renderAll();
+      } catch (err) {
+        setStatus("articleStatus", err?.message || "Errore salvataggio articolo.", "error");
       }
-
-      const result = editingArticleId
-        ? await supabaseClient.from("articles").update(payload).eq("id", editingArticleId).select()
-        : await supabaseClient.from("articles").insert(payload).select();
-
-      if (result.error) {
-        setStatus("articleStatus", result.error.message, "error");
-        return;
-      }
-
-      editingArticleId = null;
-      ["articleCode","articleDescription","articleBrand","articleCategory","articleStock","articleMinStock","articleSalePrice","articlePurchasePrice","articleLastDate"].forEach(id => document.getElementById(id).value = "");
-      document.getElementById("articleUnit").value = "pz";
-      document.getElementById("articleSupplier").value = "";
-      setStatus("articleStatus", "Articolo salvato.", "ok");
-      await loadArticles();
-      renderAll();
     }
 
     function addPurchaseRow() {
@@ -1260,6 +1312,7 @@
       document.getElementById("exportBtn").addEventListener("click", exportSnapshot);
 
       document.getElementById("saveClientBtn").addEventListener("click", saveClient);
+      document.getElementById("cancelClientEditBtn").addEventListener("click", resetClientForm);
       document.getElementById("saveSupplierBtn").addEventListener("click", saveSupplier);
       document.getElementById("saveVehicleBtn").addEventListener("click", saveVehicle);
       document.getElementById("saveOperatorBtn").addEventListener("click", saveOperator);
