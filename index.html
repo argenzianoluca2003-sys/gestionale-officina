@@ -841,18 +841,31 @@ let isSavingClient = false;
     }
 
     function editClient(id) {
-      const client = state.clients.find(x => x.id === id);
-      if (!client) {
-        setStatus("clientStatus", "Cliente non trovato.", "error");
-        return;
-      }
-      editingClientId = id;
-      fillClientForm(client);
-      document.getElementById("clientModeBadge").textContent = "Modifica cliente";
-      document.getElementById("saveClientBtn").textContent = "Aggiorna cliente";
-      setStatus("clientStatus", "Stai modificando questo cliente.", "warn");
-      switchTab("clients");
-    }
+  const client = state.clients.find(x => x.id === id);
+
+  if (!client) {
+    setStatus("clientStatus", "Cliente non trovato.", "error");
+    return;
+  }
+
+  editingClientId = id;
+
+  document.getElementById("clientName").value = client.name || "";
+  document.getElementById("clientType").value = client.type || "azienda";
+  document.getElementById("clientPhone").value = client.phone || "";
+  document.getElementById("clientVat").value = client.vat_number || "";
+  document.getElementById("clientAddress").value = client.address || "";
+  document.getElementById("clientSdi").value = client.sdi || "";
+
+  const badge = document.getElementById("clientModeBadge");
+  if (badge) badge.textContent = "Modifica cliente";
+
+  const btn = document.getElementById("saveClientBtn");
+  if (btn) btn.textContent = "Aggiorna cliente";
+
+  setStatus("clientStatus", "Stai modificando questo cliente.", "warn");
+  switchTab("clients");
+}
 
     function editSupplier(id) {
       const s = state.suppliers.find(x => x.id === id);
