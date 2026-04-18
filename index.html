@@ -900,49 +900,94 @@ let isSavingClient = false;
     }
 
     async function saveClient() {
-      if (isSavingClient) return;
+  if (isSavingClient) return;
 
-      const payload = {
-        name: document.getElementById("clientName").value.trim(),
-        type: document.getElementById("clientType").value,
-        phone: document.getElementById("clientPhone").value.trim() || null,
-        vat_number: document.getElementById("clientVat").value.trim() || null,
-        address: document.getElementById("clientAddress").value.trim() || null,
-        sdi: document.getElementById("clientSdi").value.trim() || null
-      };
+  const payload = {
+    name: document.getElementById("clientName").value.trim(),
+    type: document.getElementById("clientType").value,
+    phone: document.getElementById("clientPhone").value.trim() || null,
+    vat_number: document.getElementById("clientVat").value.trim() || null,
+    address: document.getElementById("clientAddress").value.trim() || null,
+    sdi: document.getElementById("clientSdi").value.trim() || null
+  };
 
-      if (!payload.name) {
-        setStatus("clientStatus", "Inserisci il nome cliente.", "error");
-        return;
-      }
+  if (!payload.name) {
+    setStatus("clientStatus", "Inserisci il nome cliente.", "error");
+    return;
+  }
 
-      const isEdit = !!editingClientId;
-      isSavingClient = true;
-      document.getElementById("saveClientBtn").disabled = true;
-      setStatus("clientStatus", isEdit ? "Aggiornamento in corso..." : "Salvataggio in corso...");
+  const isEdit = !!editingClientId;
+  const currentClientId = editingClientId;
 
-      try {
-        const result = isEdit
-          ? await supabaseClient.from("clients").update(payload).eq("id", editingClientId).select()
-          : await supabaseClient.from("clients").insert(payload).select();
+  isSavingClient = true;
 
-        if (result.error) {
-          setStatus("clientStatus", result.error.message, "error");
-          isSavingClient = false;
-          document.getElementById("saveClientBtn").disabled = false;
-          return;
-        }
+  const saveBtn = document.getElementById("saveClientBtn");
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = isEdit ? "Aggiornamento..." : "Salvataggio...";
+  }
 
-        await loadClients();
-        renderClients();
-        resetClientForm();
-        setStatus("clientStatus", isEdit ? "Cliente aggiornato." : "Cliente salvato.", "ok");
-      } catch (err) {
-        setStatus("clientStatus", err?.message || "Errore durante il salvataggio cliente.", "error");
-        isSavingClient = false;
-        document.getElementById("saveClientBtn").disabled = false;
-      }
+  setStatus("clientStatus", isEdit ? "Aggiornamento in corso..." : "Salvataggio in corso...");
+
+  try {
+    let result;
+
+    if (isEdit) {
+      result = await supabaseClient
+        .from("clients")
+        .update(payload)
+        .eq("id", currentClientId)
+        .select();
+    } else {
+      result = await supabaseClient
+        .from("clients")
+        .insert(payload)
+        .select();
     }
+
+    if (result.error) {
+      console.error("Errore saveClient:", result.error);
+      setStatus("clientStatus", result.error.message, "error");
+      isSavingClient = false;
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = isEdit ? "Aggiorna cliente" : "Salva cliente";
+      }
+      return;
+    }
+
+    await loadClients();
+    renderClients();
+
+    editingClientId = null;
+    isSavingClient = false;
+
+    document.getElementById("clientName").value = "";
+    document.getElementById("clientType").value = "azienda";
+    document.getElementById("clientPhone").value = "";
+    document.getElementById("clientVat").value = "";
+    document.getElementById("clientAddress").value = "";
+    document.getElementById("clientSdi").value = "";
+
+    const badge = document.getElementById("clientModeBadge");
+    if (badge) badge.textContent = "Nuovo cliente";
+
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Salva cliente";
+    }
+
+    setStatus("clientStatus", isEdit ? "Cliente aggiornato." : "Cliente salvato.", "ok");
+  } catch (err) {
+    console.error("Eccezione saveClient:", err);
+    isSavingClient = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = isEdit ? "Aggiorna cliente" : "Salva cliente";
+    }
+    setStatus("clientStatus", err?.message || "Errore durante il salvataggio cliente.", "error");
+  }
+}
 
     async function saveSupplier() {
       setStatus("supplierStatus", "Salvataggio...");
