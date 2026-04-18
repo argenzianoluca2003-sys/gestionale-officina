@@ -632,6 +632,7 @@
 
     function setStatus(id, text, type = "") {
       const el = document.getElementById(id);
+      if (!el) return;
       el.textContent = text || "";
       el.className = "status" + (type ? " " + type : "");
     }
@@ -917,7 +918,7 @@
           <td>${safe(o.role_name || "-")}</td>
           <td>${euro(o.hourly_cost)}</td>
         </tr>
-      `).join("") || `<tr><td colspan="3" class="muted">Nessun operatore.</td></tr>`;
+      }).join("") || `<tr><td colspan="3" class="muted">Nessun operatore.</td></tr>`;
     }
 
     function renderArticles() {
@@ -1139,15 +1140,15 @@
         return;
       }
 
-      let error;
+      let result;
       if (editingClientId) {
-        ({ error } = await supabaseClient.from("clients").update(payload).eq("id", editingClientId));
+        result = await supabaseClient.from("clients").update(payload).eq("id", editingClientId).select();
       } else {
-        ({ error } = await supabaseClient.from("clients").insert(payload));
+        result = await supabaseClient.from("clients").insert(payload).select();
       }
 
-      if (error) {
-        setStatus("clientStatus", error.message, "error");
+      if (result.error) {
+        setStatus("clientStatus", result.error.message, "error");
         return;
       }
 
@@ -1161,35 +1162,47 @@
 
     async function saveSupplier() {
       setStatus("supplierStatus", "Salvataggio...");
-      const payload = {
-        name: document.getElementById("supplierName").value.trim(),
-        contact_name: document.getElementById("supplierContact").value.trim() || null,
-        phone: document.getElementById("supplierPhone").value.trim() || null,
-        email: document.getElementById("supplierEmail").value.trim() || null,
-        vat_number: document.getElementById("supplierVat").value.trim() || null
-      };
-      if (!payload.name) {
-        setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
-        return;
-      }
+      try {
+        const payload = {
+          name: document.getElementById("supplierName").value.trim(),
+          contact_name: document.getElementById("supplierContact").value.trim() || null,
+          phone: document.getElementById("supplierPhone").value.trim() || null,
+          email: document.getElementById("supplierEmail").value.trim() || null,
+          vat_number: document.getElementById("supplierVat").value.trim() || null
+        };
 
-      let error;
-      if (editingSupplierId) {
-        ({ error } = await supabaseClient.from("suppliers").update(payload).eq("id", editingSupplierId));
-      } else {
-        ({ error } = await supabaseClient.from("suppliers").insert(payload));
-      }
+        if (!payload.name) {
+          setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
+          return;
+        }
 
-      if (error) {
-        setStatus("supplierStatus", error.message, "error");
-        return;
-      }
+        let result;
+        if (editingSupplierId) {
+          result = await supabaseClient.from("suppliers").update(payload).eq("id", editingSupplierId).select();
+        } else {
+          result = await supabaseClient.from("suppliers").insert(payload).select();
+        }
 
-      ["supplierName","supplierContact","supplierPhone","supplierEmail","supplierVat"].forEach(id => document.getElementById(id).value = "");
-      editingSupplierId = null;
-      setStatus("supplierStatus", "Fornitore salvato correttamente.", "ok");
-      await loadSuppliers();
-      renderAll();
+        if (result.error) {
+          setStatus("supplierStatus", result.error.message, "error");
+          return;
+        }
+
+        document.getElementById("supplierName").value = "";
+        document.getElementById("supplierContact").value = "";
+        document.getElementById("supplierPhone").value = "";
+        document.getElementById("supplierEmail").value = "";
+        document.getElementById("supplierVat").value = "";
+
+        editingSupplierId = null;
+
+        await loadSuppliers();
+        renderAll();
+
+        setStatus("supplierStatus", "Fornitore salvato correttamente.", "ok");
+      } catch (err) {
+        setStatus("supplierStatus", err?.message || "Errore inatteso sul salvataggio fornitore.", "error");
+      }
     }
 
     async function saveVehicle() {
@@ -1260,15 +1273,15 @@
         return;
       }
 
-      let error;
+      let result;
       if (editingArticleId) {
-        ({ error } = await supabaseClient.from("articles").update(payload).eq("id", editingArticleId));
+        result = await supabaseClient.from("articles").update(payload).eq("id", editingArticleId).select();
       } else {
-        ({ error } = await supabaseClient.from("articles").insert(payload));
+        result = await supabaseClient.from("articles").insert(payload).select();
       }
 
-      if (error) {
-        setStatus("articleStatus", error.message, "error");
+      if (result.error) {
+        setStatus("articleStatus", result.error.message, "error");
         return;
       }
 
