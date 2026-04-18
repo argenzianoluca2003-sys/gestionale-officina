@@ -688,78 +688,117 @@
     });
 
     async function ensureProfile(user) {
-      const { data: existing } = await supabaseClient.from("profiles").select("*").eq("id", user.id).maybeSingle();
-      if (existing) {
-        state.profile = existing;
-        return;
+      try {
+        const { data: existing, error: existingError } = await supabaseClient
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!existingError && existing) {
+          state.profile = existing;
+          return;
+        }
+
+        const { data: inserted, error: insertError } = await supabaseClient
+          .from("profiles")
+          .insert({ id: user.id, email: user.email, role: "staff" })
+          .select("*")
+          .single();
+
+        if (!insertError && inserted) {
+          state.profile = inserted;
+          return;
+        }
+
+        state.profile = { id: user.id, email: user.email, role: "staff" };
+      } catch {
+        state.profile = { id: user.id, email: user.email, role: "staff" };
       }
-      const { data: inserted } = await supabaseClient
-        .from("profiles")
-        .insert({ id: user.id, email: user.email, role: "staff" })
-        .select("*")
-        .single();
-      state.profile = inserted || { id: user.id, email: user.email, role: "staff" };
     }
 
     async function boot() {
-      const { data } = await supabaseClient.auth.getSession();
-      state.session = data.session;
-      if (state.session) {
-        await afterLogin();
-      } else {
-        toggleApp(false);
-      }
+      try {
+        const { data } = await supabaseClient.auth.getSession();
+        state.session = data.session;
 
-      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
-        state.session = session;
-        if (session) {
+        if (state.session) {
           await afterLogin();
         } else {
           toggleApp(false);
         }
-      });
+
+        supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+          state.session = session;
+          if (session) {
+            await afterLogin();
+          } else {
+            toggleApp(false);
+          }
+        });
+      } catch (err) {
+        setStatus("authStatus", err?.message || "Errore inizializzazione.", "error");
+      }
     }
 
     async function afterLogin() {
-      document.getElementById("userEmailBadge").textContent = state.session.user.email || "";
-      await ensureProfile(state.session.user);
-      document.getElementById("roleBadge").textContent = state.profile?.role || "staff";
-      toggleApp(true);
-      await refreshAll();
+      try {
+        document.getElementById("userEmailBadge").textContent = state.session?.user?.email || "";
+        toggleApp(true);
+        await ensureProfile(state.session.user);
+        document.getElementById("roleBadge").textContent = state.profile?.role || "staff";
+        await refreshAll();
+      } catch (err) {
+        toggleApp(true);
+        setStatus("authStatus", err?.message || "Errore dopo il login.", "error");
+      }
     }
 
     async function login() {
       setStatus("authStatus", "Accesso in corso...");
-      const email = document.getElementById("loginEmail").value.trim();
-      const password = document.getElementById("loginPassword").value;
 
-      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      try {
+        const email = document.getElementById("loginEmail").value.trim();
+        const password = document.getElementById("loginPassword").value;
 
-      if (error) {
-        setStatus("authStatus", error.message, "error");
-        return;
-      }
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
-      const { data } = await supabaseClient.auth.getSession();
-      if (data?.session) {
-        state.session = data.session;
-        await afterLogin();
-        setStatus("authStatus", "Login effettuato.", "ok");
-      } else {
-        setStatus("authStatus", "Login riuscito ma sessione non trovata.", "error");
+        if (error) {
+          setStatus("authStatus", error.message, "error");
+          return;
+        }
+
+        const { data } = await supabaseClient.auth.getSession();
+
+        if (data?.session) {
+          state.session = data.session;
+          await afterLogin();
+          setStatus("authStatus", "Login effettuato.", "ok");
+        } else {
+          setStatus("authStatus", "Login riuscito ma sessione non trovata.", "error");
+        }
+      } catch (err) {
+        setStatus("authStatus", err?.message || "Errore durante il login.", "error");
       }
     }
 
     async function registerUser() {
       setStatus("authStatus", "Registrazione in corso...");
-      const email = document.getElementById("loginEmail").value.trim();
-      const password = document.getElementById("loginPassword").value;
-      const { error } = await supabaseClient.auth.signUp({ email, password });
-      if (error) {
-        setStatus("authStatus", error.message, "error");
-        return;
+
+      try {
+        const email = document.getElementById("loginEmail").value.trim();
+        const password = document.getElementById("loginPassword").value;
+        const { error } = await supabaseClient.auth.signUp({ email, password });
+
+        if (error) {
+          setStatus("authStatus", error.message, "error");
+          return;
+        }
+
+        setStatus("authStatus", "Account creato. Ora fai login.", "ok");
+      } catch (err) {
+        setStatus("authStatus", err?.message || "Errore registrazione.", "error");
       }
-      setStatus("authStatus", "Account creato. Ora fai login.", "ok");
     }
 
     async function logout() {
@@ -1024,10 +1063,10 @@
       const vehicleSelect = document.getElementById("jobVehicle");
       const typeSelect = document.getElementById("jobType");
 
-      const currentClient = state.selectedJobClientId || clientSelect.value || "";
-      const currentVehicle = state.selectedJobVehicleId || vehicleSelect.value || "";
-      const currentOperator = state.selectedJobOperatorId || operatorSelect.value || "";
-      const currentType = state.selectedJobType || typeSelect.value || "riparazione";
+      const currentClient = state.selectedJobClientId || "";
+      const currentVehicle = state.selectedJobVehicleId || "";
+      const currentOperator = state.selectedJobOperatorId || "";
+      const currentType = state.selectedJobType || "riparazione";
 
       clientSelect.innerHTML = `<option value="">Seleziona cliente</option>` + state.clients.map(c => `<option value="${c.id}">${safe(c.name)}</option>`).join("");
       operatorSelect.innerHTML = `<option value="">Seleziona operatore</option>` + state.operators.map(o => `<option value="${o.id}">${safe(o.name)}</option>`).join("");
