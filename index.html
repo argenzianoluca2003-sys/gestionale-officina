@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Gestionale Officina</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+
+<body>
+
+<h2>Login</h2>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<button onclick="login()">Login</button>
+
+<h2>Aggiungi Cliente</h2>
+<input id="nome" placeholder="Nome cliente">
+<button onclick="addCliente()">Salva</button>
+
+<ul id="lista"></ul>
+
+<script>
+const supabase = supabase.createClient(
+  "https://aomvnfxupelnhxnoobve.supabase.co",
+  "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl"
+);
+
+async function login() {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  await supabase.auth.signInWithPassword({ email, password });
+  loadClienti();
+}
+
+async function addCliente() {
+  const nome = document.getElementById("nome").value;
+
+  await supabase.from("clienti").insert([{ nome }]);
+  loadClienti();
+}
+
+async function loadClienti() {
+  const { data } = await supabase.from("clienti").select("*");
+
+  const lista = document.getElementById("lista");
+  lista.innerHTML = "";
+
+  data.forEach(c => {
+    const li = document.createElement("li");
+    li.innerText = c.nome;
+    lista.appendChild(li);
+  });
+}
+</script>
+
+</body>
+</html>
