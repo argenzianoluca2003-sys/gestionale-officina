@@ -1,58 +1,836 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<title>Gestionale Officina</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Car-Agri Cloud</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --primary: #0f172a;
+      --primary-text: #ffffff;
+      --danger: #b91c1c;
+      --ok: #166534;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    h1, h2, h3 { margin: 0 0 12px; }
+    .muted { color: var(--muted); }
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    @media (max-width: 900px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    }
+    input, select, button {
+      width: 100%;
+      min-height: 42px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    button {
+      cursor: pointer;
+      background: var(--primary);
+      color: var(--primary-text);
+      border: 0;
+    }
+    button.secondary {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.danger {
+      background: var(--danger);
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .row > * { flex: 1; }
+    .status {
+      font-size: 14px;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--ok); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    .hidden { display: none !important; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      font-size: 12px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .tab {
+      width: auto;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .tab.active {
+      background: var(--primary);
+      color: white;
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+    .small { font-size: 12px; }
+    .right { text-align: right; }
+  </style>
 </head>
-
 <body>
+  <div class="container">
+    <div id="authView">
+      <div class="card" style="max-width: 420px; margin: 40px auto;">
+        <h1>Car-Agri Cloud</h1>
+        <p class="muted">Accedi al gestionale online.</p>
+        <div class="grid">
+          <input id="email" type="email" placeholder="Email" />
+          <input id="password" type="password" placeholder="Password" />
+          <div class="row">
+            <button id="loginBtn">Login</button>
+            <button id="registerBtn" class="secondary">Registrazione</button>
+          </div>
+          <div id="authStatus" class="status"></div>
+        </div>
+      </div>
+    </div>
 
-<h2>Login</h2>
-<input id="email" placeholder="Email">
-<input id="password" type="password" placeholder="Password">
-<button onclick="login()">Login</button>
+    <div id="appView" class="hidden">
+      <div class="topbar">
+        <div>
+          <h1>Car-Agri Gestionale</h1>
+          <div class="row" style="gap:8px;">
+            <span id="sessionEmail" class="pill"></span>
+            <span id="cloudState" class="pill">Online</span>
+          </div>
+        </div>
+        <div class="row" style="flex:0 0 auto;">
+          <button id="refreshBtn" class="secondary">Aggiorna</button>
+          <button id="logoutBtn" class="danger">Esci</button>
+        </div>
+      </div>
 
-<h2>Aggiungi Cliente</h2>
-<input id="nome" placeholder="Nome cliente">
-<button onclick="addCliente()">Salva</button>
+      <div class="tabs">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="clients">Clienti</button>
+        <button class="tab" data-tab="suppliers">Fornitori</button>
+        <button class="tab" data-tab="articles">Articoli</button>
+        <button class="tab" data-tab="purchases">Carico merce</button>
+      </div>
 
-<ul id="lista"></ul>
+      <div id="dashboard" class="section active">
+        <div class="grid grid-3">
+          <div class="card">
+            <h3>Clienti</h3>
+            <div id="countClients" class="small muted">0</div>
+          </div>
+          <div class="card">
+            <h3>Fornitori</h3>
+            <div id="countSuppliers" class="small muted">0</div>
+          </div>
+          <div class="card">
+            <h3>Articoli</h3>
+            <div id="countArticles" class="small muted">0</div>
+          </div>
+        </div>
+      </div>
 
-<script>
-const supabase = supabase.createClient(
-  "https://aomvnfxupelnhxnoobve.supabase.co",
-  "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl"
-);
+      <div id="clients" class="section">
+        <div class="card">
+          <h2>Nuovo cliente</h2>
+          <div class="grid grid-3">
+            <input id="clientName" placeholder="Nome cliente" />
+            <input id="clientPhone" placeholder="Telefono" />
+            <input id="clientVat" placeholder="Partita IVA" />
+            <input id="clientAddress" placeholder="Indirizzo" />
+            <input id="clientSdi" placeholder="SDI" />
+            <select id="clientType">
+              <option value="azienda">Azienda</option>
+              <option value="privato">Privato</option>
+            </select>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveClientBtn">Salva cliente</button>
+          </div>
+          <div id="clientStatus" class="status"></div>
+        </div>
 
-async function login() {
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
+        <div class="card">
+          <h2>Elenco clienti</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Telefono</th>
+                <th>P.IVA</th>
+                <th>Indirizzo</th>
+              </tr>
+            </thead>
+            <tbody id="clientsTable"></tbody>
+          </table>
+        </div>
+      </div>
 
-  await supabase.auth.signInWithPassword({ email, password });
-  loadClienti();
-}
+      <div id="suppliers" class="section">
+        <div class="card">
+          <h2>Nuovo fornitore</h2>
+          <div class="grid grid-3">
+            <input id="supplierName" placeholder="Ragione sociale" />
+            <input id="supplierContact" placeholder="Contatto" />
+            <input id="supplierPhone" placeholder="Telefono" />
+            <input id="supplierEmail" placeholder="Email" />
+            <input id="supplierVat" placeholder="Partita IVA" />
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveSupplierBtn">Salva fornitore</button>
+          </div>
+          <div id="supplierStatus" class="status"></div>
+        </div>
 
-async function addCliente() {
-  const nome = document.getElementById("nome").value;
+        <div class="card">
+          <h2>Elenco fornitori</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Contatto</th>
+                <th>Telefono</th>
+                <th>Email</th>
+              </tr>
+            </thead>
+            <tbody id="suppliersTable"></tbody>
+          </table>
+        </div>
+      </div>
 
-  await supabase.from("clienti").insert([{ nome }]);
-  loadClienti();
-}
+      <div id="articles" class="section">
+        <div class="card">
+          <h2>Nuovo articolo</h2>
+          <div class="grid grid-4">
+            <input id="articleCode" placeholder="Codice" />
+            <input id="articleDescription" placeholder="Descrizione" />
+            <input id="articleBrand" placeholder="Marca" />
+            <input id="articleCategory" placeholder="Categoria" />
+            <input id="articleUnit" placeholder="Unità" value="pz" />
+            <input id="articleStock" type="number" placeholder="Giacenza" />
+            <input id="articleMinStock" type="number" placeholder="Scorta minima" />
+            <input id="articleSalePrice" type="number" step="0.01" placeholder="Prezzo vendita" />
+            <input id="articlePurchasePrice" type="number" step="0.01" placeholder="Prezzo acquisto" />
+            <input id="articleLastDate" type="date" />
+            <select id="articleSupplier"></select>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveArticleBtn">Salva articolo</button>
+          </div>
+          <div id="articleStatus" class="status"></div>
+        </div>
 
-async function loadClienti() {
-  const { data } = await supabase.from("clienti").select("*");
+        <div class="card">
+          <h2>Elenco articoli</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Codice</th>
+                <th>Descrizione</th>
+                <th>Marca</th>
+                <th>Giacenza</th>
+                <th>Vendita</th>
+                <th>Acquisto</th>
+              </tr>
+            </thead>
+            <tbody id="articlesTable"></tbody>
+          </table>
+        </div>
+      </div>
 
-  const lista = document.getElementById("lista");
-  lista.innerHTML = "";
+      <div id="purchases" class="section">
+        <div class="card">
+          <h2>Carico merce</h2>
+          <div class="grid grid-4">
+            <select id="purchaseSupplier"></select>
+            <input id="purchaseDate" type="date" />
+            <input id="purchaseDocument" placeholder="Numero documento" />
+          </div>
 
-  data.forEach(c => {
-    const li = document.createElement("li");
-    li.innerText = c.nome;
-    lista.appendChild(li);
-  });
-}
-</script>
+          <div style="margin-top: 14px;">
+            <button id="addPurchaseRowBtn" class="secondary">Aggiungi riga</button>
+          </div>
 
+          <div style="overflow-x:auto; margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Articolo</th>
+                  <th>Quantità</th>
+                  <th>Prezzo acquisto</th>
+                  <th>Prezzo vendita</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="purchaseRowsTable"></tbody>
+            </table>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button id="savePurchaseBtn">Conferma carico</button>
+          </div>
+          <div id="purchaseStatus" class="status"></div>
+        </div>
+
+        <div class="card">
+          <h2>Storico carichi</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Fornitore</th>
+                <th>Documento</th>
+                <th class="right">Totale netto</th>
+              </tr>
+            </thead>
+            <tbody id="purchaseHistoryTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://aomvnfxupelnhxnoobve.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl";
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const state = {
+      session: null,
+      clients: [],
+      suppliers: [],
+      articles: [],
+      purchases: [],
+      purchaseRows: [],
+      purchaseEditorRows: []
+    };
+
+    function setStatus(id, message, type = "") {
+      const el = document.getElementById(id);
+      el.textContent = message || "";
+      el.className = "status" + (type ? " " + type : "");
+    }
+
+    function euro(value) {
+      return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value || 0));
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function normalizeText(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function toggleApp(isLoggedIn) {
+      document.getElementById("authView").classList.toggle("hidden", isLoggedIn);
+      document.getElementById("appView").classList.toggle("hidden", !isLoggedIn);
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll(".tab").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.tab === tab);
+      });
+      document.querySelectorAll(".section").forEach(sec => {
+        sec.classList.toggle("active", sec.id === tab);
+      });
+    }
+
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    });
+
+    async function boot() {
+      const { data } = await supabaseClient.auth.getSession();
+      state.session = data.session;
+      if (state.session) {
+        document.getElementById("sessionEmail").textContent = state.session.user.email || "";
+        toggleApp(true);
+        await refreshAll();
+      } else {
+        toggleApp(false);
+      }
+
+      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+        state.session = session;
+        if (session) {
+          document.getElementById("sessionEmail").textContent = session.user.email || "";
+          toggleApp(true);
+          await refreshAll();
+        } else {
+          toggleApp(false);
+        }
+      });
+    }
+
+    async function login() {
+      setStatus("authStatus", "Accesso in corso...");
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        setStatus("authStatus", error.message, "error");
+        return;
+      }
+      setStatus("authStatus", "Login effettuato.", "ok");
+    }
+
+    async function register() {
+      setStatus("authStatus", "Registrazione in corso...");
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const { error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) {
+        setStatus("authStatus", error.message, "error");
+        return;
+      }
+      setStatus("authStatus", "Account creato. Ora prova il login.", "ok");
+    }
+
+    async function logout() {
+      await supabaseClient.auth.signOut();
+    }
+
+    async function refreshAll() {
+      await Promise.all([
+        loadClients(),
+        loadSuppliers(),
+        loadArticles(),
+        loadPurchaseHistory()
+      ]);
+      renderCounts();
+      renderPurchaseEditor();
+    }
+
+    function renderCounts() {
+      document.getElementById("countClients").textContent = String(state.clients.length);
+      document.getElementById("countSuppliers").textContent = String(state.suppliers.length);
+      document.getElementById("countArticles").textContent = String(state.articles.length);
+    }
+
+    async function loadClients() {
+      const { data, error } = await supabaseClient
+        .from("clients")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setStatus("clientStatus", error.message, "error");
+        return;
+      }
+
+      state.clients = data || [];
+      const tbody = document.getElementById("clientsTable");
+      tbody.innerHTML = state.clients.map(c => `
+        <tr>
+          <td>${escapeHtml(c.name)}</td>
+          <td>${escapeHtml(c.type || "-")}</td>
+          <td>${escapeHtml(c.phone || "-")}</td>
+          <td>${escapeHtml(c.vat_number || "-")}</td>
+          <td>${escapeHtml(c.address || "-")}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function saveClient() {
+      setStatus("clientStatus", "Salvataggio...");
+      const payload = {
+        name: document.getElementById("clientName").value.trim(),
+        type: document.getElementById("clientType").value,
+        phone: document.getElementById("clientPhone").value.trim() || null,
+        vat_number: document.getElementById("clientVat").value.trim() || null,
+        address: document.getElementById("clientAddress").value.trim() || null,
+        sdi: document.getElementById("clientSdi").value.trim() || null
+      };
+
+      if (!payload.name) {
+        setStatus("clientStatus", "Inserisci il nome cliente.", "error");
+        return;
+      }
+
+      const { error } = await supabaseClient.from("clients").insert(payload);
+      if (error) {
+        setStatus("clientStatus", error.message, "error");
+        return;
+      }
+
+      document.getElementById("clientName").value = "";
+      document.getElementById("clientPhone").value = "";
+      document.getElementById("clientVat").value = "";
+      document.getElementById("clientAddress").value = "";
+      document.getElementById("clientSdi").value = "";
+      setStatus("clientStatus", "Cliente salvato.", "ok");
+      await loadClients();
+      renderCounts();
+    }
+
+    async function loadSuppliers() {
+      const { data, error } = await supabaseClient
+        .from("suppliers")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setStatus("supplierStatus", error.message, "error");
+        return;
+      }
+
+      state.suppliers = data || [];
+      const tbody = document.getElementById("suppliersTable");
+      tbody.innerHTML = state.suppliers.map(s => `
+        <tr>
+          <td>${escapeHtml(s.name)}</td>
+          <td>${escapeHtml(s.contact_name || "-")}</td>
+          <td>${escapeHtml(s.phone || "-")}</td>
+          <td>${escapeHtml(s.email || "-")}</td>
+        </tr>
+      `).join("");
+
+      const options = [`<option value="">Seleziona fornitore</option>`]
+        .concat(state.suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`))
+        .join("");
+
+      document.getElementById("articleSupplier").innerHTML = options;
+      document.getElementById("purchaseSupplier").innerHTML = options;
+    }
+
+    async function saveSupplier() {
+      setStatus("supplierStatus", "Salvataggio...");
+      const payload = {
+        name: document.getElementById("supplierName").value.trim(),
+        contact_name: document.getElementById("supplierContact").value.trim() || null,
+        phone: document.getElementById("supplierPhone").value.trim() || null,
+        email: document.getElementById("supplierEmail").value.trim() || null,
+        vat_number: document.getElementById("supplierVat").value.trim() || null
+      };
+
+      if (!payload.name) {
+        setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
+        return;
+      }
+
+      const { error } = await supabaseClient.from("suppliers").insert(payload);
+      if (error) {
+        setStatus("supplierStatus", error.message, "error");
+        return;
+      }
+
+      document.getElementById("supplierName").value = "";
+      document.getElementById("supplierContact").value = "";
+      document.getElementById("supplierPhone").value = "";
+      document.getElementById("supplierEmail").value = "";
+      document.getElementById("supplierVat").value = "";
+      setStatus("supplierStatus", "Fornitore salvato.", "ok");
+      await loadSuppliers();
+      renderCounts();
+    }
+
+    async function loadArticles() {
+      const { data, error } = await supabaseClient
+        .from("articles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setStatus("articleStatus", error.message, "error");
+        return;
+      }
+
+      state.articles = data || [];
+      const tbody = document.getElementById("articlesTable");
+      tbody.innerHTML = state.articles.map(a => `
+        <tr>
+          <td>${escapeHtml(a.code)}</td>
+          <td>${escapeHtml(a.description)}</td>
+          <td>${escapeHtml(a.brand || "-")}</td>
+          <td>${escapeHtml(a.stock)}</td>
+          <td>${euro(a.sale_price_net)}</td>
+          <td>${euro(a.purchase_price_net)}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function saveArticle() {
+      setStatus("articleStatus", "Salvataggio...");
+      const payload = {
+        category: document.getElementById("articleCategory").value.trim() || "Generico",
+        code: document.getElementById("articleCode").value.trim().toUpperCase(),
+        description: document.getElementById("articleDescription").value.trim(),
+        brand: document.getElementById("articleBrand").value.trim() || null,
+        unit: document.getElementById("articleUnit").value.trim() || "pz",
+        stock: Number(document.getElementById("articleStock").value || 0),
+        min_stock: Number(document.getElementById("articleMinStock").value || 0),
+        sale_price_net: Number(document.getElementById("articleSalePrice").value || 0),
+        purchase_price_net: Number(document.getElementById("articlePurchasePrice").value || 0),
+        last_purchase_date: document.getElementById("articleLastDate").value || null,
+        last_supplier_id: document.getElementById("articleSupplier").value || null
+      };
+
+      if (!payload.code || !payload.description) {
+        setStatus("articleStatus", "Inserisci codice e descrizione.", "error");
+        return;
+      }
+
+      const existing = state.articles.find(a => normalizeText(a.code) === normalizeText(payload.code));
+
+      let error;
+      if (existing) {
+        ({ error } = await supabaseClient.from("articles").update(payload).eq("id", existing.id));
+      } else {
+        ({ error } = await supabaseClient.from("articles").insert(payload));
+      }
+
+      if (error) {
+        setStatus("articleStatus", error.message, "error");
+        return;
+      }
+
+      document.getElementById("articleCode").value = "";
+      document.getElementById("articleDescription").value = "";
+      document.getElementById("articleBrand").value = "";
+      document.getElementById("articleCategory").value = "";
+      document.getElementById("articleUnit").value = "pz";
+      document.getElementById("articleStock").value = "";
+      document.getElementById("articleMinStock").value = "";
+      document.getElementById("articleSalePrice").value = "";
+      document.getElementById("articlePurchasePrice").value = "";
+      document.getElementById("articleLastDate").value = "";
+      document.getElementById("articleSupplier").value = "";
+      setStatus("articleStatus", "Articolo salvato.", "ok");
+      await loadArticles();
+      renderCounts();
+      renderPurchaseEditor();
+    }
+
+    function addPurchaseEditorRow() {
+      state.purchaseEditorRows.push({
+        id: crypto.randomUUID(),
+        article_id: "",
+        quantity: "",
+        purchase_price_net: "",
+        sale_price_net: ""
+      });
+      renderPurchaseEditor();
+    }
+
+    function removePurchaseEditorRow(id) {
+      state.purchaseEditorRows = state.purchaseEditorRows.filter(r => r.id !== id);
+      renderPurchaseEditor();
+    }
+
+    function updatePurchaseEditorRow(id, field, value) {
+      const row = state.purchaseEditorRows.find(r => r.id === id);
+      if (!row) return;
+      row[field] = value;
+    }
+
+    function renderPurchaseEditor() {
+      document.getElementById("purchaseDate").value ||= new Date().toISOString().slice(0, 10);
+      const tbody = document.getElementById("purchaseRowsTable");
+      tbody.innerHTML = state.purchaseEditorRows.map(row => `
+        <tr>
+          <td>
+            <select onchange="updatePurchaseEditorRow('${row.id}','article_id',this.value)">
+              <option value="">Seleziona articolo</option>
+              ${state.articles.map(a => `
+                <option value="${a.id}" ${a.id === row.article_id ? "selected" : ""}>
+                  ${escapeHtml(a.code)} - ${escapeHtml(a.description)}
+                </option>
+              `).join("")}
+            </select>
+          </td>
+          <td><input type="number" value="${escapeHtml(row.quantity)}" onchange="updatePurchaseEditorRow('${row.id}','quantity',this.value)"></td>
+          <td><input type="number" step="0.01" value="${escapeHtml(row.purchase_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','purchase_price_net',this.value)"></td>
+          <td><input type="number" step="0.01" value="${escapeHtml(row.sale_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','sale_price_net',this.value)"></td>
+          <td><button class="secondary" onclick="removePurchaseEditorRow('${row.id}')">Elimina</button></td>
+        </tr>
+      `).join("");
+    }
+
+    async function savePurchase() {
+      setStatus("purchaseStatus", "Salvataggio carico...");
+      const supplier_id = document.getElementById("purchaseSupplier").value;
+      const date = document.getElementById("purchaseDate").value;
+      const document_number = document.getElementById("purchaseDocument").value.trim() || null;
+
+      const validRows = state.purchaseEditorRows.filter(r => r.article_id && Number(r.quantity) > 0);
+
+      if (!supplier_id) {
+        setStatus("purchaseStatus", "Seleziona il fornitore.", "error");
+        return;
+      }
+      if (validRows.length === 0) {
+        setStatus("purchaseStatus", "Inserisci almeno una riga valida.", "error");
+        return;
+      }
+
+      const total_net = validRows.reduce((acc, r) => acc + Number(r.quantity || 0) * Number(r.purchase_price_net || 0), 0);
+
+      const { data: purchase, error: purchaseError } = await supabaseClient
+        .from("purchase_history")
+        .insert({ date, supplier_id, document_number, total_net })
+        .select("*")
+        .single();
+
+      if (purchaseError) {
+        setStatus("purchaseStatus", purchaseError.message, "error");
+        return;
+      }
+
+      const rowsPayload = validRows.map(r => {
+        const article = state.articles.find(a => a.id === r.article_id);
+        return {
+          purchase_history_id: purchase.id,
+          article_id: r.article_id,
+          code: article?.code || "",
+          description: article?.description || "",
+          quantity: Number(r.quantity || 0),
+          purchase_price_net: Number(r.purchase_price_net || 0),
+          sale_price_net: Number(r.sale_price_net || 0),
+          total_net: Number(r.quantity || 0) * Number(r.purchase_price_net || 0)
+        };
+      });
+
+      const { error: rowsError } = await supabaseClient.from("purchase_history_rows").insert(rowsPayload);
+      if (rowsError) {
+        setStatus("purchaseStatus", rowsError.message, "error");
+        return;
+      }
+
+      for (const r of validRows) {
+        const article = state.articles.find(a => a.id === r.article_id);
+        if (!article) continue;
+        const { error } = await supabaseClient
+          .from("articles")
+          .update({
+            stock: Number(article.stock || 0) + Number(r.quantity || 0),
+            purchase_price_net: Number(r.purchase_price_net || article.purchase_price_net || 0),
+            sale_price_net: Number(r.sale_price_net || article.sale_price_net || 0),
+            last_supplier_id: supplier_id,
+            last_purchase_date: date
+          })
+          .eq("id", article.id);
+        if (error) {
+          setStatus("purchaseStatus", error.message, "error");
+          return;
+        }
+      }
+
+      state.purchaseEditorRows = [];
+      document.getElementById("purchaseSupplier").value = "";
+      document.getElementById("purchaseDocument").value = "";
+      setStatus("purchaseStatus", "Carico merce salvato.", "ok");
+      await Promise.all([loadArticles(), loadPurchaseHistory()]);
+      renderPurchaseEditor();
+    }
+
+    async function loadPurchaseHistory() {
+      const { data, error } = await supabaseClient
+        .from("purchase_history")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setStatus("purchaseStatus", error.message, "error");
+        return;
+      }
+
+      state.purchases = data || [];
+      const tbody = document.getElementById("purchaseHistoryTable");
+      tbody.innerHTML = state.purchases.map(p => {
+        const supplier = state.suppliers.find(s => s.id === p.supplier_id);
+        return `
+          <tr>
+            <td>${escapeHtml(p.date)}</td>
+            <td>${escapeHtml(supplier?.name || "-")}</td>
+            <td>${escapeHtml(p.document_number || "-")}</td>
+            <td class="right">${euro(p.total_net)}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    document.getElementById("loginBtn").addEventListener("click", login);
+    document.getElementById("registerBtn").addEventListener("click", register);
+    document.getElementById("logoutBtn").addEventListener("click", logout);
+    document.getElementById("refreshBtn").addEventListener("click", refreshAll);
+    document.getElementById("saveClientBtn").addEventListener("click", saveClient);
+    document.getElementById("saveSupplierBtn").addEventListener("click", saveSupplier);
+    document.getElementById("saveArticleBtn").addEventListener("click", saveArticle);
+    document.getElementById("addPurchaseRowBtn").addEventListener("click", addPurchaseEditorRow);
+    document.getElementById("savePurchaseBtn").addEventListener("click", savePurchase);
+
+    boot();
+  </script>
 </body>
 </html>
