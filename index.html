@@ -605,93 +605,114 @@
   </div>
 
   <script>
-    const SUPABASE_URL = "https://aomvnfxupelnhxnoobve.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl";
-    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    const IVA_DEFAULT = 22;
+  const SUPABASE_URL = "https://aomvnfxupelnhxnoobve.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const IVA_DEFAULT = 22;
 
-    const state = {
-      session: null,
-      profile: null,
-      clients: [],
-      suppliers: [],
-      vehicles: [],
-      operators: [],
-      articles: [],
-      jobs: [],
-      jobRowsHistory: [],
-      purchases: [],
-      purchaseRowsHistory: [],
-      purchaseEditorRows: [],
-      jobEditorRows: []
-    };
+  const state = {
+    session: null,
+    profile: null,
+    clients: [],
+    suppliers: [],
+    vehicles: [],
+    operators: [],
+    articles: [],
+    jobs: [],
+    jobRowsHistory: [],
+    purchases: [],
+    purchaseRowsHistory: [],
+    purchaseEditorRows: [],
+    jobEditorRows: []
+  };
 
-    let editingClientId = null;
-    let editingSupplierId = null;
-    let editingArticleId = null;
+  let editingClientId = null;
+  let editingSupplierId = null;
+  let editingArticleId = null;
+  let isSavingClient = false;
 
-    function setStatus(id, text, type = "") {
-      const el = document.getElementById(id);
-      el.textContent = text || "";
-      el.className = "status" + (type ? " " + type : "");
-    }
+  function setStatus(id, text, type = "") {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text || "";
+    el.className = "status" + (type ? " " + type : "");
+  }
 
-    function euro(value) {
-      return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value || 0));
-    }
+  function euro(value) {
+    return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value || 0));
+  }
 
-    function safe(value) {
-      return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
+  function safe(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
 
-    function normalizeText(value) {
-      return String(value || "").trim().toLowerCase();
-    }
+  function normalizeText(value) {
+    return String(value || "").trim().toLowerCase();
+  }
 
-    function makeLocalId() {
-      return (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random());
-    }
+  function makeLocalId() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random());
+  }
 
-    function toggleApp(logged) {
-      document.getElementById("authView").classList.toggle("hidden", logged);
-      document.getElementById("appView").classList.toggle("hidden", !logged);
-    }
+  function toggleApp(logged) {
+    document.getElementById("authView").classList.toggle("hidden", logged);
+    document.getElementById("appView").classList.toggle("hidden", !logged);
+  }
 
-    function switchTab(tabId) {
-      document.querySelectorAll(".tab").forEach(btn => {
-        btn.classList.toggle("active", btn.dataset.tab === tabId);
-      });
-      document.querySelectorAll(".section").forEach(sec => {
-        sec.classList.toggle("active", sec.id === tabId);
-      });
-    }
-
+  function switchTab(tabId) {
     document.querySelectorAll(".tab").forEach(btn => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      btn.classList.toggle("active", btn.dataset.tab === tabId);
     });
+    document.querySelectorAll(".section").forEach(sec => {
+      sec.classList.toggle("active", sec.id === tabId);
+    });
+  }
 
-    async function ensureProfile(user) {
-      const { data: existing } = await supabaseClient.from("profiles").select("*").eq("id", user.id).maybeSingle();
-      if (existing) {
+  document.querySelectorAll(".tab").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  async function ensureProfile(user) {
+    try {
+      const { data: existing, error: selectError } = await supabaseClient
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!selectError && existing) {
         state.profile = existing;
         return;
       }
-      const { data: inserted } = await supabaseClient
+
+      const { data: inserted, error: insertError } = await supabaseClient
         .from("profiles")
         .insert({ id: user.id, email: user.email, role: "staff" })
         .select("*")
         .single();
-      state.profile = inserted || { id: user.id, email: user.email, role: "staff" };
-    }
 
-    async function boot() {
+      if (!insertError && inserted) {
+        state.profile = inserted;
+        return;
+      }
+
+      state.profile = { id: user.id, email: user.email, role: "staff" };
+    } catch (err) {
+      console.warn("Profilo non caricato, uso profilo locale:", err);
+      state.profile = { id: user.id, email: user.email, role: "staff" };
+    }
+  }
+
+  async function boot() {
+    try {
       const { data } = await supabaseClient.auth.getSession();
       state.session = data.session;
+
       if (state.session) {
         await afterLogin();
       } else {
@@ -706,871 +727,1063 @@
           toggleApp(false);
         }
       });
+    } catch (err) {
+      console.error("Errore boot:", err);
+      toggleApp(false);
+      setStatus("authStatus", err?.message || "Errore inizializzazione.", "error");
     }
+  }
 
-    async function afterLogin() {
-      document.getElementById("userEmailBadge").textContent = state.session.user.email || "";
-      await ensureProfile(state.session.user);
-      document.getElementById("roleBadge").textContent = state.profile?.role || "staff";
+  async function afterLogin() {
+    try {
+      document.getElementById("userEmailBadge").textContent = state.session?.user?.email || "";
       toggleApp(true);
+
+      await ensureProfile(state.session.user);
+
+      document.getElementById("roleBadge").textContent = state.profile?.role || "staff";
+
       await refreshAll();
+    } catch (err) {
+      console.error("Errore afterLogin:", err);
+      toggleApp(true);
+      setStatus("authStatus", err?.message || "Errore apertura gestionale.", "error");
     }
+  }
 
-    async function login() {
-      setStatus("authStatus", "Accesso in corso...");
+  async function login() {
+    setStatus("authStatus", "Accesso in corso...");
+
+    try {
       const email = document.getElementById("loginEmail").value.trim();
       const password = document.getElementById("loginPassword").value;
+
       const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
       if (error) {
         setStatus("authStatus", error.message, "error");
         return;
       }
-      setStatus("authStatus", "Login effettuato.", "ok");
-    }
 
-    async function registerUser() {
-      setStatus("authStatus", "Registrazione in corso...");
+      const { data } = await supabaseClient.auth.getSession();
+
+      if (!data?.session) {
+        setStatus("authStatus", "Login riuscito ma sessione non trovata.", "error");
+        return;
+      }
+
+      state.session = data.session;
+      setStatus("authStatus", "Login effettuato.", "ok");
+      await afterLogin();
+    } catch (err) {
+      console.error("Errore login:", err);
+      setStatus("authStatus", err?.message || "Errore durante il login.", "error");
+    }
+  }
+
+  async function registerUser() {
+    setStatus("authStatus", "Registrazione in corso...");
+
+    try {
       const email = document.getElementById("loginEmail").value.trim();
       const password = document.getElementById("loginPassword").value;
+
       const { error } = await supabaseClient.auth.signUp({ email, password });
+
       if (error) {
         setStatus("authStatus", error.message, "error");
         return;
       }
+
       setStatus("authStatus", "Account creato. Ora effettua il login.", "ok");
+    } catch (err) {
+      console.error("Errore registrazione:", err);
+      setStatus("authStatus", err?.message || "Errore registrazione.", "error");
     }
+  }
 
-    async function logout() {
-      await supabaseClient.auth.signOut();
-      state.profile = null;
-    }
+  async function logout() {
+    await supabaseClient.auth.signOut();
+    state.profile = null;
+  }
 
-    async function refreshAll() {
-      document.getElementById("cloudBadge").textContent = "Sincronizzazione...";
-      await Promise.all([
-        loadClients(),
-        loadSuppliers(),
-        loadVehicles(),
-        loadOperators(),
-        loadArticles(),
-        loadJobs(),
-        loadJobRowsHistory(),
-        loadPurchases(),
-        loadPurchaseRowsHistory()
-      ]);
-      renderAll();
-      document.getElementById("cloudBadge").textContent = "Online";
-    }
+  async function refreshAll() {
+    document.getElementById("cloudBadge").textContent = "Sincronizzazione...";
 
-    function renderAll() {
-      renderMetrics();
-      renderDashboard();
-      renderClients();
-      renderSuppliers();
-      renderVehicles();
-      renderOperators();
-      renderArticles();
-      renderPurchaseSelectors();
-      renderPurchaseEditorRows();
-      renderPurchaseHistory();
-      renderJobSelectors();
-      renderJobMatches();
-      renderJobEditorRows();
-      renderJobSummary();
-      renderJobs();
-      renderBrandLists();
-    }
+    await Promise.all([
+      loadClients(),
+      loadSuppliers(),
+      loadVehicles(),
+      loadOperators(),
+      loadArticles(),
+      loadJobs(),
+      loadJobRowsHistory(),
+      loadPurchases(),
+      loadPurchaseRowsHistory()
+    ]);
 
-    async function loadClients() {
-      const { data, error } = await supabaseClient.from("clients").select("*").order("created_at", { ascending: false });
-      if (error) setStatus("clientStatus", error.message, "error");
-      state.clients = data || [];
-    }
+    renderAll();
+    document.getElementById("cloudBadge").textContent = "Online";
+  }
 
-    async function loadSuppliers() {
-      const { data, error } = await supabaseClient.from("suppliers").select("*").order("created_at", { ascending: false });
-      if (error) setStatus("supplierStatus", error.message, "error");
-      state.suppliers = data || [];
-    }
+  function renderAll() {
+    renderMetrics();
+    renderDashboard();
+    renderClients();
+    renderSuppliers();
+    renderVehicles();
+    renderOperators();
+    renderArticles();
+    renderPurchaseSelectors();
+    renderPurchaseEditorRows();
+    renderPurchaseHistory();
+    renderJobSelectors();
+    renderJobMatches();
+    renderJobEditorRows();
+    renderJobSummary();
+    renderJobs();
+    renderBrandLists();
+  }
 
-    async function loadVehicles() {
-      const { data, error } = await supabaseClient.from("vehicles").select("*").order("created_at", { ascending: false });
-      if (error) setStatus("vehicleStatus", error.message, "error");
-      state.vehicles = data || [];
-    }
+  async function loadClients() {
+    const { data, error } = await supabaseClient.from("clients").select("*").order("created_at", { ascending: false });
+    if (error) setStatus("clientStatus", error.message, "error");
+    state.clients = data || [];
+  }
 
-    async function loadOperators() {
-      const { data, error } = await supabaseClient.from("operators").select("*").order("created_at", { ascending: false });
-      if (error) setStatus("operatorStatus", error.message, "error");
-      state.operators = data || [];
-    }
+  async function loadSuppliers() {
+    const { data, error } = await supabaseClient.from("suppliers").select("*").order("created_at", { ascending: false });
+    if (error) setStatus("supplierStatus", error.message, "error");
+    state.suppliers = data || [];
+  }
 
-    async function loadArticles() {
-      const { data, error } = await supabaseClient.from("articles").select("*").order("created_at", { ascending: false });
-      if (error) setStatus("articleStatus", error.message, "error");
-      state.articles = data || [];
-    }
+  async function loadVehicles() {
+    const { data, error } = await supabaseClient.from("vehicles").select("*").order("created_at", { ascending: false });
+    if (error) setStatus("vehicleStatus", error.message, "error");
+    state.vehicles = data || [];
+  }
 
-    async function loadJobs() {
-      const { data, error } = await supabaseClient.from("jobs").select("*").order("created_at", { ascending: false });
-      if (error) setStatus("jobStatus", error.message, "error");
-      state.jobs = data || [];
-    }
+  async function loadOperators() {
+    const { data, error } = await supabaseClient.from("operators").select("*").order("created_at", { ascending: false });
+    if (error) setStatus("operatorStatus", error.message, "error");
+    state.operators = data || [];
+  }
 
-    async function loadJobRowsHistory() {
-      const { data } = await supabaseClient.from("job_rows").select("*").order("created_at", { ascending: false });
-      state.jobRowsHistory = data || [];
-    }
+  async function loadArticles() {
+    const { data, error } = await supabaseClient.from("articles").select("*").order("created_at", { ascending: false });
+    if (error) setStatus("articleStatus", error.message, "error");
+    state.articles = data || [];
+  }
 
-    async function loadPurchases() {
-      const { data, error } = await supabaseClient.from("purchase_history").select("*").order("created_at", { ascending: false });
-      if (error) setStatus("purchaseStatus", error.message, "error");
-      state.purchases = data || [];
-    }
+  async function loadJobs() {
+    const { data, error } = await supabaseClient.from("jobs").select("*").order("created_at", { ascending: false });
+    if (error) setStatus("jobStatus", error.message, "error");
+    state.jobs = data || [];
+  }
 
-    async function loadPurchaseRowsHistory() {
-      const { data } = await supabaseClient.from("purchase_history_rows").select("*").order("created_at", { ascending: false });
-      state.purchaseRowsHistory = data || [];
-    }
+  async function loadJobRowsHistory() {
+    const { data } = await supabaseClient.from("job_rows").select("*").order("created_at", { ascending: false });
+    state.jobRowsHistory = data || [];
+  }
 
-    function renderMetrics() {
-      document.getElementById("metricClients").textContent = state.clients.length;
-      document.getElementById("metricSuppliers").textContent = state.suppliers.length;
-      document.getElementById("metricArticles").textContent = state.articles.length;
-      const inventory = state.articles.reduce((acc, a) => acc + Number(a.stock || 0) * Number(a.purchase_price_net || 0), 0);
-      document.getElementById("metricInventory").textContent = euro(inventory);
-    }
+  async function loadPurchases() {
+    const { data, error } = await supabaseClient.from("purchase_history").select("*").order("created_at", { ascending: false });
+    if (error) setStatus("purchaseStatus", error.message, "error");
+    state.purchases = data || [];
+  }
 
-    function renderDashboard() {
-      document.getElementById("dashboardPurchases").innerHTML = state.purchases.slice(0, 5).map(p => {
-        const supplier = state.suppliers.find(s => s.id === p.supplier_id);
-        return `
-          <tr>
-            <td>${safe(p.date)}</td>
-            <td>${safe(supplier?.name || "-")}</td>
-            <td>${safe(p.document_number || "-")}</td>
-            <td class="right">${euro(p.total_net)}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="4" class="muted">Nessun carico.</td></tr>`;
+  async function loadPurchaseRowsHistory() {
+    const { data } = await supabaseClient.from("purchase_history_rows").select("*").order("created_at", { ascending: false });
+    state.purchaseRowsHistory = data || [];
+  }
 
-      document.getElementById("dashboardJobs").innerHTML = state.jobs.slice(0, 5).map(j => {
-        const client = state.clients.find(c => c.id === j.client_id);
-        return `
-          <tr>
-            <td>${safe(j.number)}</td>
-            <td>${safe(client?.name || "-")}</td>
-            <td>${safe(j.type)}</td>
-            <td class="right">${euro(j.total_gross)}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="4" class="muted">Nessuna commessa.</td></tr>`;
-    }
+  function renderMetrics() {
+    document.getElementById("metricClients").textContent = state.clients.length;
+    document.getElementById("metricSuppliers").textContent = state.suppliers.length;
+    document.getElementById("metricArticles").textContent = state.articles.length;
 
-    function renderClients() {
-      document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
+    const inventory = state.articles.reduce((acc, a) => {
+      return acc + Number(a.stock || 0) * Number(a.purchase_price_net || 0);
+    }, 0);
+
+    document.getElementById("metricInventory").textContent = euro(inventory);
+  }
+
+  function renderDashboard() {
+    document.getElementById("dashboardPurchases").innerHTML = state.purchases.slice(0, 5).map(p => {
+      const supplier = state.suppliers.find(s => s.id === p.supplier_id);
+      return `
         <tr>
-          <td>${safe(c.name)}</td>
-          <td>${safe(c.type || "-")}</td>
-          <td>${safe(c.phone || "-")}</td>
-          <td>${safe(c.vat_number || "-")}</td>
-          <td>${safe(c.address || "-")}</td>
-          <td>${safe(c.sdi || "-")}</td>
-          <td><button class="secondary small-btn" onclick="editClient('${c.id}')">Modifica</button></td>
+          <td>${safe(p.date)}</td>
+          <td>${safe(supplier?.name || "-")}</td>
+          <td>${safe(p.document_number || "-")}</td>
+          <td class="right">${euro(p.total_net)}</td>
         </tr>
-      `).join("") || `<tr><td colspan="7" class="muted">Nessun cliente.</td></tr>`;
-    }
+      `;
+    }).join("") || `<tr><td colspan="4" class="muted">Nessun carico.</td></tr>`;
 
-    function renderSuppliers() {
-      document.getElementById("suppliersTable").innerHTML = state.suppliers.map(s => `
+    document.getElementById("dashboardJobs").innerHTML = state.jobs.slice(0, 5).map(j => {
+      const client = state.clients.find(c => c.id === j.client_id);
+      return `
         <tr>
-          <td>${safe(s.name)}</td>
-          <td>${safe(s.contact_name || "-")}</td>
-          <td>${safe(s.phone || "-")}</td>
-          <td>${safe(s.email || "-")}</td>
-          <td>${safe(s.vat_number || "-")}</td>
-          <td><button class="secondary small-btn" onclick="editSupplier('${s.id}')">Modifica</button></td>
+          <td>${safe(j.number)}</td>
+          <td>${safe(client?.name || "-")}</td>
+          <td>${safe(j.type)}</td>
+          <td class="right">${euro(j.total_gross)}</td>
         </tr>
-      `).join("") || `<tr><td colspan="6" class="muted">Nessun fornitore.</td></tr>`;
-    }
+      `;
+    }).join("") || `<tr><td colspan="4" class="muted">Nessuna commessa.</td></tr>`;
+  }
 
-    function renderVehicles() {
-      document.getElementById("vehiclesTable").innerHTML = state.vehicles.map(v => {
-        const client = state.clients.find(c => c.id === v.client_id);
-        return `
-          <tr>
-            <td>${safe(v.plate)}</td>
-            <td>${safe(client?.name || "-")}</td>
-            <td>${safe(v.brand || "-")}</td>
-            <td>${safe(v.model || "-")}</td>
-            <td>${safe(v.vehicle_type || "-")}</td>
-            <td>${safe(v.vin || "-")}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="6" class="muted">Nessun veicolo.</td></tr>`;
-    }
+  function renderClients() {
+    document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
+      <tr>
+        <td>${safe(c.name)}</td>
+        <td>${safe(c.type || "-")}</td>
+        <td>${safe(c.phone || "-")}</td>
+        <td>${safe(c.vat_number || "-")}</td>
+        <td>${safe(c.address || "-")}</td>
+        <td>${safe(c.sdi || "-")}</td>
+        <td><button class="secondary small-btn" onclick="editClient('${c.id}')">Modifica</button></td>
+      </tr>
+    `).join("") || `<tr><td colspan="7" class="muted">Nessun cliente.</td></tr>`;
+  }
 
-    function renderOperators() {
-      document.getElementById("operatorsTable").innerHTML = state.operators.map(o => `
+  function renderSuppliers() {
+    document.getElementById("suppliersTable").innerHTML = state.suppliers.map(s => `
+      <tr>
+        <td>${safe(s.name)}</td>
+        <td>${safe(s.contact_name || "-")}</td>
+        <td>${safe(s.phone || "-")}</td>
+        <td>${safe(s.email || "-")}</td>
+        <td>${safe(s.vat_number || "-")}</td>
+        <td><button class="secondary small-btn" onclick="editSupplier('${s.id}')">Modifica</button></td>
+      </tr>
+    `).join("") || `<tr><td colspan="6" class="muted">Nessun fornitore.</td></tr>`;
+  }
+
+  function renderVehicles() {
+    document.getElementById("vehiclesTable").innerHTML = state.vehicles.map(v => {
+      const client = state.clients.find(c => c.id === v.client_id);
+      return `
         <tr>
-          <td>${safe(o.name)}</td>
-          <td>${safe(o.role_name || "-")}</td>
-          <td>${euro(o.hourly_cost)}</td>
+          <td>${safe(v.plate)}</td>
+          <td>${safe(client?.name || "-")}</td>
+          <td>${safe(v.brand || "-")}</td>
+          <td>${safe(v.model || "-")}</td>
+          <td>${safe(v.vehicle_type || "-")}</td>
+          <td>${safe(v.vin || "-")}</td>
         </tr>
-      `).join("") || `<tr><td colspan="3" class="muted">Nessun operatore.</td></tr>`;
-    }
+      `;
+    }).join("") || `<tr><td colspan="6" class="muted">Nessun veicolo.</td></tr>`;
+  }
 
-    function renderArticles() {
-      document.getElementById("articlesTable").innerHTML = state.articles.map(a => {
-        const supplier = state.suppliers.find(s => s.id === a.last_supplier_id);
-        return `
-          <tr>
-            <td>${safe(a.code)}</td>
-            <td>${safe(a.description)}</td>
-            <td>${safe(a.brand || "-")}</td>
-            <td>${safe(a.stock)}</td>
-            <td>${euro(a.sale_price_net)}</td>
-            <td>${euro(a.purchase_price_net)}</td>
-            <td>${safe(supplier?.name || "-")}</td>
-            <td><button class="secondary small-btn" onclick="editArticle('${a.id}')">Modifica</button></td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="8" class="muted">Nessun articolo.</td></tr>`;
-    }
+  function renderOperators() {
+    document.getElementById("operatorsTable").innerHTML = state.operators.map(o => `
+      <tr>
+        <td>${safe(o.name)}</td>
+        <td>${safe(o.role_name || "-")}</td>
+        <td>${euro(o.hourly_cost)}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="3" class="muted">Nessun operatore.</td></tr>`;
+  }
 
-    function renderPurchaseSelectors() {
-      const supplierOptions = [`<option value="">Seleziona fornitore</option>`]
-        .concat(state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`))
-        .join("");
-
-      document.getElementById("purchaseSupplier").innerHTML = supplierOptions;
-      document.getElementById("articleSupplier").innerHTML = `<option value="">Nessun fornitore</option>` + state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`).join("");
-      document.getElementById("purchaseFilterSupplier").innerHTML = `<option value="">Tutti i fornitori</option>` + state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`).join("");
-    }
-
-    function renderPurchaseEditorRows() {
-      document.getElementById("purchaseDate").value ||= new Date().toISOString().slice(0, 10);
-      document.getElementById("purchaseRowsTable").innerHTML = state.purchaseEditorRows.map(row => `
+  function renderArticles() {
+    document.getElementById("articlesTable").innerHTML = state.articles.map(a => {
+      const supplier = state.suppliers.find(s => s.id === a.last_supplier_id);
+      return `
         <tr>
-          <td>
-            <select onchange="updatePurchaseEditorRow('${row.id}','article_id',this.value)">
-              <option value="">Seleziona articolo</option>
-              ${state.articles.map(a => `<option value="${a.id}" ${a.id === row.article_id ? "selected" : ""}>${safe(a.code)} - ${safe(a.description)}</option>`).join("")}
-            </select>
-          </td>
-          <td><input type="number" step="0.01" value="${safe(row.quantity)}" onchange="updatePurchaseEditorRow('${row.id}','quantity',this.value)"></td>
-          <td><input type="number" step="0.01" value="${safe(row.purchase_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','purchase_price_net',this.value)"></td>
-          <td><input type="number" step="0.01" value="${safe(row.sale_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','sale_price_net',this.value)"></td>
-          <td><button class="secondary small-btn" onclick="removePurchaseEditorRow('${row.id}')">Elimina</button></td>
+          <td>${safe(a.code)}</td>
+          <td>${safe(a.description)}</td>
+          <td>${safe(a.brand || "-")}</td>
+          <td>${safe(a.stock)}</td>
+          <td>${euro(a.sale_price_net)}</td>
+          <td>${euro(a.purchase_price_net)}</td>
+          <td>${safe(supplier?.name || "-")}</td>
+          <td><button class="secondary small-btn" onclick="editArticle('${a.id}')">Modifica</button></td>
         </tr>
-      `).join("") || `<tr><td colspan="5" class="muted">Nessuna riga di carico.</td></tr>`;
+      `;
+    }).join("") || `<tr><td colspan="8" class="muted">Nessun articolo.</td></tr>`;
+  }
+
+  function renderPurchaseSelectors() {
+    const supplierOptions = [`<option value="">Seleziona fornitore</option>`]
+      .concat(state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`))
+      .join("");
+
+    document.getElementById("purchaseSupplier").innerHTML = supplierOptions;
+    document.getElementById("articleSupplier").innerHTML =
+      `<option value="">Nessun fornitore</option>` +
+      state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`).join("");
+
+    document.getElementById("purchaseFilterSupplier").innerHTML =
+      `<option value="">Tutti i fornitori</option>` +
+      state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`).join("");
+  }
+
+  function renderPurchaseEditorRows() {
+    document.getElementById("purchaseDate").value ||= new Date().toISOString().slice(0, 10);
+
+    document.getElementById("purchaseRowsTable").innerHTML = state.purchaseEditorRows.map(row => `
+      <tr>
+        <td>
+          <select onchange="updatePurchaseEditorRow('${row.id}','article_id',this.value)">
+            <option value="">Seleziona articolo</option>
+            ${state.articles.map(a => `<option value="${a.id}" ${a.id === row.article_id ? "selected" : ""}>${safe(a.code)} - ${safe(a.description)}</option>`).join("")}
+          </select>
+        </td>
+        <td><input type="number" step="0.01" value="${safe(row.quantity)}" onchange="updatePurchaseEditorRow('${row.id}','quantity',this.value)"></td>
+        <td><input type="number" step="0.01" value="${safe(row.purchase_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','purchase_price_net',this.value)"></td>
+        <td><input type="number" step="0.01" value="${safe(row.sale_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','sale_price_net',this.value)"></td>
+        <td><button class="secondary small-btn" onclick="removePurchaseEditorRow('${row.id}')">Elimina</button></td>
+      </tr>
+    `).join("") || `<tr><td colspan="5" class="muted">Nessuna riga di carico.</td></tr>`;
+  }
+
+  function renderPurchaseHistory() {
+    const month = document.getElementById("purchaseFilterMonth").value;
+    const supplierId = document.getElementById("purchaseFilterSupplier").value;
+
+    const filtered = state.purchases.filter(p => {
+      const monthOk = month ? String(p.date).startsWith(month) : true;
+      const supplierOk = supplierId ? p.supplier_id === supplierId : true;
+      return monthOk && supplierOk;
+    });
+
+    document.getElementById("purchaseHistoryTable").innerHTML = filtered.map(p => {
+      const supplier = state.suppliers.find(s => s.id === p.supplier_id);
+      return `
+        <tr>
+          <td>${safe(p.date)}</td>
+          <td>${safe(supplier?.name || "-")}</td>
+          <td>${safe(p.document_number || "-")}</td>
+          <td class="right">${euro(p.total_net)}</td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="4" class="muted">Nessun carico registrato.</td></tr>`;
+  }
+
+  function renderJobSelectors() {
+    document.getElementById("jobClient").innerHTML =
+      `<option value="">Seleziona cliente</option>` +
+      state.clients.map(c => `<option value="${c.id}">${safe(c.name)}</option>`).join("");
+
+    document.getElementById("jobOperator").innerHTML =
+      `<option value="">Seleziona operatore</option>` +
+      state.operators.map(o => `<option value="${o.id}">${safe(o.name)}</option>`).join("");
+
+    const selectedClientId = document.getElementById("jobClient").value;
+    const vehicles = state.vehicles.filter(v => v.client_id === selectedClientId);
+
+    document.getElementById("jobVehicle").innerHTML =
+      `<option value="">Seleziona veicolo</option>` +
+      vehicles.map(v => `<option value="${v.id}">${safe(v.plate)} - ${safe(v.model || "")}</option>`).join("");
+
+    document.getElementById("vehicleClient").innerHTML =
+      `<option value="">Seleziona cliente</option>` +
+      state.clients.map(c => `<option value="${c.id}">${safe(c.name)}</option>`).join("");
+  }
+
+  function renderJobMatches() {
+    const query = normalizeText(document.getElementById("jobArticleSearch").value);
+    const box = document.getElementById("jobArticleMatches");
+
+    if (!query) {
+      box.innerHTML = "";
+      return;
     }
 
-    function renderPurchaseHistory() {
-      const month = document.getElementById("purchaseFilterMonth").value;
-      const supplierId = document.getElementById("purchaseFilterSupplier").value;
-      const filtered = state.purchases.filter(p => {
-        const monthOk = month ? String(p.date).startsWith(month) : true;
-        const supplierOk = supplierId ? p.supplier_id === supplierId : true;
-        return monthOk && supplierOk;
-      });
+    const matches = state.articles.filter(a =>
+      normalizeText(a.code).includes(query) || normalizeText(a.description).includes(query)
+    ).slice(0, 8);
 
-      document.getElementById("purchaseHistoryTable").innerHTML = filtered.map(p => {
-        const supplier = state.suppliers.find(s => s.id === p.supplier_id);
-        return `
-          <tr>
-            <td>${safe(p.date)}</td>
-            <td>${safe(supplier?.name || "-")}</td>
-            <td>${safe(p.document_number || "-")}</td>
-            <td class="right">${euro(p.total_net)}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="4" class="muted">Nessun carico registrato.</td></tr>`;
+    if (matches.length === 0) {
+      box.innerHTML = `<div class="empty">Nessun articolo trovato.</div>`;
+      return;
     }
 
-    function renderJobSelectors() {
-      document.getElementById("jobClient").innerHTML = `<option value="">Seleziona cliente</option>` + state.clients.map(c => `<option value="${c.id}">${safe(c.name)}</option>`).join("");
-      document.getElementById("jobOperator").innerHTML = `<option value="">Seleziona operatore</option>` + state.operators.map(o => `<option value="${o.id}">${safe(o.name)}</option>`).join("");
-
-      const selectedClientId = document.getElementById("jobClient").value;
-      const vehicles = state.vehicles.filter(v => v.client_id === selectedClientId);
-      document.getElementById("jobVehicle").innerHTML = `<option value="">Seleziona veicolo</option>` + vehicles.map(v => `<option value="${v.id}">${safe(v.plate)} - ${safe(v.model || "")}</option>`).join("");
-
-      document.getElementById("vehicleClient").innerHTML = `<option value="">Seleziona cliente</option>` + state.clients.map(c => `<option value="${c.id}">${safe(c.name)}</option>`).join("");
-    }
-
-    function renderJobMatches() {
-      const query = normalizeText(document.getElementById("jobArticleSearch").value);
-      const box = document.getElementById("jobArticleMatches");
-      if (!query) {
-        box.innerHTML = "";
-        return;
-      }
-      const matches = state.articles.filter(a =>
-        normalizeText(a.code).includes(query) || normalizeText(a.description).includes(query)
-      ).slice(0, 8);
-
-      if (matches.length === 0) {
-        box.innerHTML = `<div class="empty">Nessun articolo trovato.</div>`;
-        return;
-      }
-
-      box.innerHTML = matches.map(a => `
-        <div class="card" style="padding:10px;margin-bottom:8px;">
-          <div class="row space-between">
-            <div>
-              <strong>${safe(a.code)}</strong>
-              <div class="small muted">${safe(a.description)}</div>
-            </div>
-            <div>
-              <button class="small-btn" onclick="addArticleToJob('${a.id}')">Aggiungi</button>
-            </div>
+    box.innerHTML = matches.map(a => `
+      <div class="card" style="padding:10px;margin-bottom:8px;">
+        <div class="row space-between">
+          <div>
+            <strong>${safe(a.code)}</strong>
+            <div class="small muted">${safe(a.description)}</div>
+          </div>
+          <div>
+            <button class="small-btn" onclick="addArticleToJob('${a.id}')">Aggiungi</button>
           </div>
         </div>
-      `).join("");
-    }
+      </div>
+    `).join("");
+  }
 
-    function renderJobEditorRows() {
-      document.getElementById("jobRowsTable").innerHTML = state.jobEditorRows.map(row => `
+  function renderJobEditorRows() {
+    document.getElementById("jobRowsTable").innerHTML = state.jobEditorRows.map(row => `
+      <tr>
+        <td><span class="badge">${safe(row.row_type)}</span></td>
+        <td><input value="${safe(row.description)}" onchange="updateJobEditorRow('${row.id}','description',this.value)"></td>
+        <td>${safe(row.operator_name || "-")}</td>
+        <td><input type="number" step="0.01" value="${safe(row.quantity)}" onchange="updateJobEditorRow('${row.id}','quantity',this.value)"></td>
+        <td><input type="number" step="0.01" value="${safe(row.purchase_price_net)}" onchange="updateJobEditorRow('${row.id}','purchase_price_net',this.value)"></td>
+        <td><input type="number" step="0.01" value="${safe(row.sale_price_net)}" onchange="updateJobEditorRow('${row.id}','sale_price_net',this.value)"></td>
+        <td><button class="secondary small-btn" onclick="removeJobEditorRow('${row.id}')">Elimina</button></td>
+      </tr>
+    `).join("") || `<tr><td colspan="7" class="muted">Nessuna riga in commessa.</td></tr>`;
+  }
+
+  function renderJobSummary() {
+    const imponibile = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * Number(row.sale_price_net || 0), 0);
+    const vat = imponibile * IVA_DEFAULT / 100;
+    const total = imponibile + vat;
+    const margin = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * (Number(row.sale_price_net || 0) - Number(row.purchase_price_net || 0)), 0);
+
+    document.getElementById("jobSummaryImponibile").textContent = euro(imponibile);
+    document.getElementById("jobSummaryVat").textContent = euro(vat);
+    document.getElementById("jobSummaryTotal").textContent = euro(total);
+    document.getElementById("jobSummaryMargin").textContent = euro(margin);
+  }
+
+  function renderJobs() {
+    document.getElementById("jobsTable").innerHTML = state.jobs.map(j => {
+      const client = state.clients.find(c => c.id === j.client_id);
+      return `
         <tr>
-          <td><span class="badge">${safe(row.row_type)}</span></td>
-          <td><input value="${safe(row.description)}" onchange="updateJobEditorRow('${row.id}','description',this.value)"></td>
-          <td>${safe(row.operator_name || "-")}</td>
-          <td><input type="number" step="0.01" value="${safe(row.quantity)}" onchange="updateJobEditorRow('${row.id}','quantity',this.value)"></td>
-          <td><input type="number" step="0.01" value="${safe(row.purchase_price_net)}" onchange="updateJobEditorRow('${row.id}','purchase_price_net',this.value)"></td>
-          <td><input type="number" step="0.01" value="${safe(row.sale_price_net)}" onchange="updateJobEditorRow('${row.id}','sale_price_net',this.value)"></td>
-          <td><button class="secondary small-btn" onclick="removeJobEditorRow('${row.id}')">Elimina</button></td>
+          <td>${safe(j.number)}</td>
+          <td>${safe(j.closed_at ? String(j.closed_at).slice(0,10) : j.date)}</td>
+          <td>${safe(client?.name || "-")}</td>
+          <td>${safe(j.type)}</td>
+          <td class="right">${euro(j.total_gross)}</td>
         </tr>
-      `).join("") || `<tr><td colspan="7" class="muted">Nessuna riga in commessa.</td></tr>`;
-    }
+      `;
+    }).join("") || `<tr><td colspan="5" class="muted">Nessuna commessa salvata.</td></tr>`;
+  }
 
-    function renderJobSummary() {
-      const imponibile = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * Number(row.sale_price_net || 0), 0);
-      const vat = imponibile * IVA_DEFAULT / 100;
-      const total = imponibile + vat;
-      const margin = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * (Number(row.sale_price_net || 0) - Number(row.purchase_price_net || 0)), 0);
+  function renderBrandLists() {
+    const articleBrands = [...new Set(state.articles.map(a => a.brand).filter(Boolean))];
+    const vehicleBrands = [...new Set(state.vehicles.map(v => v.brand).filter(Boolean))];
 
-      document.getElementById("jobSummaryImponibile").textContent = euro(imponibile);
-      document.getElementById("jobSummaryVat").textContent = euro(vat);
-      document.getElementById("jobSummaryTotal").textContent = euro(total);
-      document.getElementById("jobSummaryMargin").textContent = euro(margin);
-    }
+    document.getElementById("articleBrandsList").innerHTML =
+      articleBrands.map(b => `<option value="${safe(b)}"></option>`).join("");
 
-    function renderJobs() {
-      document.getElementById("jobsTable").innerHTML = state.jobs.map(j => {
-        const client = state.clients.find(c => c.id === j.client_id);
-        return `
-          <tr>
-            <td>${safe(j.number)}</td>
-            <td>${safe(j.closed_at ? String(j.closed_at).slice(0,10) : j.date)}</td>
-            <td>${safe(client?.name || "-")}</td>
-            <td>${safe(j.type)}</td>
-            <td class="right">${euro(j.total_gross)}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="5" class="muted">Nessuna commessa salvata.</td></tr>`;
-    }
+    document.getElementById("vehicleBrandsList").innerHTML =
+      vehicleBrands.map(b => `<option value="${safe(b)}"></option>`).join("");
+  }
 
-    function renderBrandLists() {
-      const articleBrands = [...new Set(state.articles.map(a => a.brand).filter(Boolean))];
-      const vehicleBrands = [...new Set(state.vehicles.map(v => v.brand).filter(Boolean))];
-      document.getElementById("articleBrandsList").innerHTML = articleBrands.map(b => `<option value="${safe(b)}"></option>`).join("");
-      document.getElementById("vehicleBrandsList").innerHTML = vehicleBrands.map(b => `<option value="${safe(b)}"></option>`).join("");
-    }
+  async function editClient(id) {
+    try {
+      setStatus("clientStatus", "Caricamento cliente...", "warn");
 
-    function editClient(id) {
-      const c = state.clients.find(x => x.id === id);
-      if (!c) return;
+      const { data: c, error } = await supabaseClient
+        .from("clients")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error || !c) {
+        setStatus("clientStatus", error?.message || "Cliente non trovato.", "error");
+        return;
+      }
+
       editingClientId = id;
+
       document.getElementById("clientName").value = c.name || "";
       document.getElementById("clientType").value = c.type || "azienda";
       document.getElementById("clientPhone").value = c.phone || "";
       document.getElementById("clientVat").value = c.vat_number || "";
       document.getElementById("clientAddress").value = c.address || "";
       document.getElementById("clientSdi").value = c.sdi || "";
+
+      isSavingClient = false;
+
+      const btn = document.getElementById("saveClientBtn");
+      btn.disabled = false;
+      btn.textContent = "Aggiorna cliente";
+
       setStatus("clientStatus", "Stai modificando questo cliente.", "warn");
       switchTab("clients");
+    } catch (err) {
+      console.error("Errore editClient:", err);
+      setStatus("clientStatus", err?.message || "Errore caricamento cliente.", "error");
+    }
+  }
+
+  function editSupplier(id) {
+    const s = state.suppliers.find(x => x.id === id);
+    if (!s) return;
+
+    editingSupplierId = id;
+
+    document.getElementById("supplierName").value = s.name || "";
+    document.getElementById("supplierContact").value = s.contact_name || "";
+    document.getElementById("supplierPhone").value = s.phone || "";
+    document.getElementById("supplierEmail").value = s.email || "";
+    document.getElementById("supplierVat").value = s.vat_number || "";
+
+    setStatus("supplierStatus", "Stai modificando questo fornitore.", "warn");
+    switchTab("suppliers");
+  }
+
+  function editArticle(id) {
+    const a = state.articles.find(x => x.id === id);
+    if (!a) return;
+
+    editingArticleId = id;
+
+    document.getElementById("articleCode").value = a.code || "";
+    document.getElementById("articleDescription").value = a.description || "";
+    document.getElementById("articleBrand").value = a.brand || "";
+    document.getElementById("articleCategory").value = a.category || "";
+    document.getElementById("articleUnit").value = a.unit || "pz";
+    document.getElementById("articleStock").value = a.stock ?? "";
+    document.getElementById("articleMinStock").value = a.min_stock ?? "";
+    document.getElementById("articleSalePrice").value = a.sale_price_net ?? "";
+    document.getElementById("articlePurchasePrice").value = a.purchase_price_net ?? "";
+    document.getElementById("articleLastDate").value = a.last_purchase_date || "";
+    document.getElementById("articleSupplier").value = a.last_supplier_id || "";
+
+    setStatus("articleStatus", "Stai modificando questo articolo.", "warn");
+    switchTab("articles");
+  }
+
+  async function saveClient() {
+    if (isSavingClient) return;
+
+    const btn = document.getElementById("saveClientBtn");
+
+    const payload = {
+      name: document.getElementById("clientName").value.trim(),
+      type: document.getElementById("clientType").value,
+      phone: document.getElementById("clientPhone").value.trim() || null,
+      vat_number: document.getElementById("clientVat").value.trim() || null,
+      address: document.getElementById("clientAddress").value.trim() || null,
+      sdi: document.getElementById("clientSdi").value.trim() || null
+    };
+
+    if (!payload.name) {
+      setStatus("clientStatus", "Inserisci il nome cliente.", "error");
+      return;
     }
 
-    function editSupplier(id) {
-      const s = state.suppliers.find(x => x.id === id);
-      if (!s) return;
-      editingSupplierId = id;
-      document.getElementById("supplierName").value = s.name || "";
-      document.getElementById("supplierContact").value = s.contact_name || "";
-      document.getElementById("supplierPhone").value = s.phone || "";
-      document.getElementById("supplierEmail").value = s.email || "";
-      document.getElementById("supplierVat").value = s.vat_number || "";
-      setStatus("supplierStatus", "Stai modificando questo fornitore.", "warn");
-      switchTab("suppliers");
-    }
+    const isEdit = !!editingClientId;
+    const currentClientId = editingClientId;
 
-    function editArticle(id) {
-      const a = state.articles.find(x => x.id === id);
-      if (!a) return;
-      editingArticleId = id;
-      document.getElementById("articleCode").value = a.code || "";
-      document.getElementById("articleDescription").value = a.description || "";
-      document.getElementById("articleBrand").value = a.brand || "";
-      document.getElementById("articleCategory").value = a.category || "";
-      document.getElementById("articleUnit").value = a.unit || "pz";
-      document.getElementById("articleStock").value = a.stock ?? "";
-      document.getElementById("articleMinStock").value = a.min_stock ?? "";
-      document.getElementById("articleSalePrice").value = a.sale_price_net ?? "";
-      document.getElementById("articlePurchasePrice").value = a.purchase_price_net ?? "";
-      document.getElementById("articleLastDate").value = a.last_purchase_date || "";
-      document.getElementById("articleSupplier").value = a.last_supplier_id || "";
-      setStatus("articleStatus", "Stai modificando questo articolo.", "warn");
-      switchTab("articles");
-    }
+    isSavingClient = true;
+    btn.disabled = true;
+    btn.textContent = isEdit ? "Aggiornamento..." : "Salvataggio...";
 
-    async function saveClient() {
-      setStatus("clientStatus", "Salvataggio...");
-      const payload = {
-        name: document.getElementById("clientName").value.trim(),
-        type: document.getElementById("clientType").value,
-        phone: document.getElementById("clientPhone").value.trim() || null,
-        vat_number: document.getElementById("clientVat").value.trim() || null,
-        address: document.getElementById("clientAddress").value.trim() || null,
-        sdi: document.getElementById("clientSdi").value.trim() || null
-      };
-      if (!payload.name) {
-        setStatus("clientStatus", "Inserisci il nome cliente.", "error");
-        return;
-      }
+    setStatus("clientStatus", isEdit ? "Aggiornamento in corso..." : "Salvataggio in corso...");
 
-      let error;
-      if (editingClientId) {
-        ({ error } = await supabaseClient.from("clients").update(payload).eq("id", editingClientId));
+    try {
+      let result;
+
+      if (isEdit) {
+        result = await supabaseClient
+          .from("clients")
+          .update(payload)
+          .eq("id", currentClientId)
+          .select();
       } else {
-        ({ error } = await supabaseClient.from("clients").insert(payload));
+        result = await supabaseClient
+          .from("clients")
+          .insert(payload)
+          .select();
       }
 
-      if (error) {
-        setStatus("clientStatus", error.message, "error");
-        return;
+      if (result.error) {
+        throw result.error;
       }
 
-      ["clientName","clientPhone","clientVat","clientAddress","clientSdi"].forEach(id => document.getElementById(id).value = "");
-      document.getElementById("clientType").value = "azienda";
       editingClientId = null;
-      setStatus("clientStatus", "Cliente salvato correttamente.", "ok");
+
+      document.getElementById("clientName").value = "";
+      document.getElementById("clientType").value = "azienda";
+      document.getElementById("clientPhone").value = "";
+      document.getElementById("clientVat").value = "";
+      document.getElementById("clientAddress").value = "";
+      document.getElementById("clientSdi").value = "";
+
       await loadClients();
-      renderAll();
+
+      renderClients();
+      renderMetrics();
+      renderDashboard();
+      renderJobSelectors();
+
+      setStatus("clientStatus", isEdit ? "Cliente aggiornato correttamente." : "Cliente salvato correttamente.", "ok");
+    } catch (err) {
+      console.error("Errore saveClient:", err);
+      setStatus("clientStatus", err?.message || "Errore durante il salvataggio cliente.", "error");
+    } finally {
+      isSavingClient = false;
+      btn.disabled = false;
+      btn.textContent = "Salva cliente";
+    }
+  }
+
+  async function saveSupplier() {
+    setStatus("supplierStatus", "Salvataggio...");
+
+    const payload = {
+      name: document.getElementById("supplierName").value.trim(),
+      contact_name: document.getElementById("supplierContact").value.trim() || null,
+      phone: document.getElementById("supplierPhone").value.trim() || null,
+      email: document.getElementById("supplierEmail").value.trim() || null,
+      vat_number: document.getElementById("supplierVat").value.trim() || null
+    };
+
+    if (!payload.name) {
+      setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
+      return;
     }
 
-    async function saveSupplier() {
-      setStatus("supplierStatus", "Salvataggio...");
-      const payload = {
-        name: document.getElementById("supplierName").value.trim(),
-        contact_name: document.getElementById("supplierContact").value.trim() || null,
-        phone: document.getElementById("supplierPhone").value.trim() || null,
-        email: document.getElementById("supplierEmail").value.trim() || null,
-        vat_number: document.getElementById("supplierVat").value.trim() || null
-      };
-      if (!payload.name) {
-        setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
-        return;
-      }
+    let error;
 
-      let error;
-      if (editingSupplierId) {
-        ({ error } = await supabaseClient.from("suppliers").update(payload).eq("id", editingSupplierId));
-      } else {
-        ({ error } = await supabaseClient.from("suppliers").insert(payload));
-      }
-
-      if (error) {
-        setStatus("supplierStatus", error.message, "error");
-        return;
-      }
-
-      ["supplierName","supplierContact","supplierPhone","supplierEmail","supplierVat"].forEach(id => document.getElementById(id).value = "");
-      editingSupplierId = null;
-      setStatus("supplierStatus", "Fornitore salvato correttamente.", "ok");
-      await loadSuppliers();
-      renderAll();
+    if (editingSupplierId) {
+      ({ error } = await supabaseClient.from("suppliers").update(payload).eq("id", editingSupplierId));
+    } else {
+      ({ error } = await supabaseClient.from("suppliers").insert(payload));
     }
 
-    async function saveVehicle() {
-      setStatus("vehicleStatus", "Salvataggio...");
-      const payload = {
-        client_id: document.getElementById("vehicleClient").value || null,
-        plate: document.getElementById("vehiclePlate").value.trim().toUpperCase(),
-        brand: document.getElementById("vehicleBrand").value.trim() || null,
-        model: document.getElementById("vehicleModel").value.trim() || null,
-        vehicle_type: document.getElementById("vehicleType").value.trim() || null,
-        vin: document.getElementById("vehicleVin").value.trim() || null
-      };
-      if (!payload.client_id || !payload.plate) {
-        setStatus("vehicleStatus", "Seleziona cliente e inserisci targa.", "error");
-        return;
-      }
-      const { error } = await supabaseClient.from("vehicles").insert(payload);
-      if (error) {
-        setStatus("vehicleStatus", error.message, "error");
-        return;
-      }
-      ["vehiclePlate","vehicleBrand","vehicleModel","vehicleType","vehicleVin"].forEach(id => document.getElementById(id).value = "");
-      document.getElementById("vehicleClient").value = "";
-      setStatus("vehicleStatus", "Veicolo salvato.", "ok");
-      await loadVehicles();
-      renderAll();
+    if (error) {
+      setStatus("supplierStatus", error.message, "error");
+      return;
     }
 
-    async function saveOperator() {
-      setStatus("operatorStatus", "Salvataggio...");
-      const payload = {
-        name: document.getElementById("operatorName").value.trim(),
-        role_name: document.getElementById("operatorRole").value.trim() || null,
-        hourly_cost: Number(document.getElementById("operatorHourlyCost").value || 0)
-      };
-      if (!payload.name) {
-        setStatus("operatorStatus", "Inserisci il nome operatore.", "error");
-        return;
-      }
-      const { error } = await supabaseClient.from("operators").insert(payload);
-      if (error) {
-        setStatus("operatorStatus", error.message, "error");
-        return;
-      }
-      ["operatorName","operatorRole","operatorHourlyCost"].forEach(id => document.getElementById(id).value = "");
-      setStatus("operatorStatus", "Operatore salvato.", "ok");
-      await loadOperators();
-      renderAll();
+    ["supplierName","supplierContact","supplierPhone","supplierEmail","supplierVat"].forEach(id => document.getElementById(id).value = "");
+
+    editingSupplierId = null;
+
+    setStatus("supplierStatus", "Fornitore salvato correttamente.", "ok");
+
+    await loadSuppliers();
+    renderAll();
+  }
+
+  async function saveVehicle() {
+    setStatus("vehicleStatus", "Salvataggio...");
+
+    const payload = {
+      client_id: document.getElementById("vehicleClient").value || null,
+      plate: document.getElementById("vehiclePlate").value.trim().toUpperCase(),
+      brand: document.getElementById("vehicleBrand").value.trim() || null,
+      model: document.getElementById("vehicleModel").value.trim() || null,
+      vehicle_type: document.getElementById("vehicleType").value.trim() || null,
+      vin: document.getElementById("vehicleVin").value.trim() || null
+    };
+
+    if (!payload.client_id || !payload.plate) {
+      setStatus("vehicleStatus", "Seleziona cliente e inserisci targa.", "error");
+      return;
     }
 
-    async function saveArticle() {
-      setStatus("articleStatus", "Salvataggio...");
-      const payload = {
-        category: document.getElementById("articleCategory").value.trim() || "Generico",
-        code: document.getElementById("articleCode").value.trim().toUpperCase(),
-        description: document.getElementById("articleDescription").value.trim(),
-        brand: document.getElementById("articleBrand").value.trim() || null,
-        unit: document.getElementById("articleUnit").value.trim() || "pz",
-        stock: Number(document.getElementById("articleStock").value || 0),
-        min_stock: Number(document.getElementById("articleMinStock").value || 0),
-        sale_price_net: Number(document.getElementById("articleSalePrice").value || 0),
-        purchase_price_net: Number(document.getElementById("articlePurchasePrice").value || 0),
-        last_purchase_date: document.getElementById("articleLastDate").value || null,
-        last_supplier_id: document.getElementById("articleSupplier").value || null
-      };
-      if (!payload.code || !payload.description) {
-        setStatus("articleStatus", "Inserisci codice e descrizione.", "error");
-        return;
-      }
+    const { error } = await supabaseClient.from("vehicles").insert(payload);
 
-      let error;
-      if (editingArticleId) {
-        ({ error } = await supabaseClient.from("articles").update(payload).eq("id", editingArticleId));
-      } else {
-        ({ error } = await supabaseClient.from("articles").insert(payload));
-      }
-
-      if (error) {
-        setStatus("articleStatus", error.message, "error");
-        return;
-      }
-
-      [
-        "articleCode","articleDescription","articleBrand","articleCategory",
-        "articleStock","articleMinStock","articleSalePrice","articlePurchasePrice","articleLastDate"
-      ].forEach(id => document.getElementById(id).value = "");
-      document.getElementById("articleUnit").value = "pz";
-      document.getElementById("articleSupplier").value = "";
-      editingArticleId = null;
-      setStatus("articleStatus", "Articolo salvato correttamente.", "ok");
-      await loadArticles();
-      renderAll();
+    if (error) {
+      setStatus("vehicleStatus", error.message, "error");
+      return;
     }
 
-    function addPurchaseRow() {
-      state.purchaseEditorRows.push({
-        id: makeLocalId(),
-        article_id: "",
-        quantity: "",
-        purchase_price_net: "",
-        sale_price_net: ""
-      });
-      renderPurchaseEditorRows();
+    ["vehiclePlate","vehicleBrand","vehicleModel","vehicleType","vehicleVin"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("vehicleClient").value = "";
+
+    setStatus("vehicleStatus", "Veicolo salvato.", "ok");
+
+    await loadVehicles();
+    renderAll();
+  }
+
+  async function saveOperator() {
+    setStatus("operatorStatus", "Salvataggio...");
+
+    const payload = {
+      name: document.getElementById("operatorName").value.trim(),
+      role_name: document.getElementById("operatorRole").value.trim() || null,
+      hourly_cost: Number(document.getElementById("operatorHourlyCost").value || 0)
+    };
+
+    if (!payload.name) {
+      setStatus("operatorStatus", "Inserisci il nome operatore.", "error");
+      return;
     }
 
-    function updatePurchaseEditorRow(id, field, value) {
-      const row = state.purchaseEditorRows.find(r => r.id === id);
-      if (!row) return;
-      row[field] = value;
+    const { error } = await supabaseClient.from("operators").insert(payload);
+
+    if (error) {
+      setStatus("operatorStatus", error.message, "error");
+      return;
     }
 
-    function removePurchaseEditorRow(id) {
-      state.purchaseEditorRows = state.purchaseEditorRows.filter(r => r.id !== id);
-      renderPurchaseEditorRows();
+    ["operatorName","operatorRole","operatorHourlyCost"].forEach(id => document.getElementById(id).value = "");
+
+    setStatus("operatorStatus", "Operatore salvato.", "ok");
+
+    await loadOperators();
+    renderAll();
+  }
+
+  async function saveArticle() {
+    setStatus("articleStatus", "Salvataggio...");
+
+    const payload = {
+      category: document.getElementById("articleCategory").value.trim() || "Generico",
+      code: document.getElementById("articleCode").value.trim().toUpperCase(),
+      description: document.getElementById("articleDescription").value.trim(),
+      brand: document.getElementById("articleBrand").value.trim() || null,
+      unit: document.getElementById("articleUnit").value.trim() || "pz",
+      stock: Number(document.getElementById("articleStock").value || 0),
+      min_stock: Number(document.getElementById("articleMinStock").value || 0),
+      sale_price_net: Number(document.getElementById("articleSalePrice").value || 0),
+      purchase_price_net: Number(document.getElementById("articlePurchasePrice").value || 0),
+      last_purchase_date: document.getElementById("articleLastDate").value || null,
+      last_supplier_id: document.getElementById("articleSupplier").value || null
+    };
+
+    if (!payload.code || !payload.description) {
+      setStatus("articleStatus", "Inserisci codice e descrizione.", "error");
+      return;
     }
 
-    async function savePurchase() {
-      setStatus("purchaseStatus", "Salvataggio carico...");
-      const supplier_id = document.getElementById("purchaseSupplier").value;
-      const date = document.getElementById("purchaseDate").value;
-      const document_number = document.getElementById("purchaseDocument").value.trim() || null;
-      const validRows = state.purchaseEditorRows.filter(r => r.article_id && Number(r.quantity) > 0);
+    let error;
 
-      if (!supplier_id) {
-        setStatus("purchaseStatus", "Seleziona il fornitore.", "error");
-        return;
-      }
-      if (validRows.length === 0) {
-        setStatus("purchaseStatus", "Inserisci almeno una riga valida.", "error");
-        return;
-      }
-
-      const total_net = validRows.reduce((acc, r) => acc + Number(r.quantity || 0) * Number(r.purchase_price_net || 0), 0);
-
-      const { data: purchase, error: purchaseError } = await supabaseClient
-        .from("purchase_history")
-        .insert({ date, supplier_id, document_number, total_net })
-        .select("*")
-        .single();
-
-      if (purchaseError) {
-        setStatus("purchaseStatus", purchaseError.message, "error");
-        return;
-      }
-
-      const rowsPayload = validRows.map(r => {
-        const article = state.articles.find(a => a.id === r.article_id);
-        return {
-          purchase_history_id: purchase.id,
-          article_id: r.article_id,
-          code: article?.code || "",
-          description: article?.description || "",
-          quantity: Number(r.quantity || 0),
-          purchase_price_net: Number(r.purchase_price_net || 0),
-          sale_price_net: Number(r.sale_price_net || 0),
-          total_net: Number(r.quantity || 0) * Number(r.purchase_price_net || 0)
-        };
-      });
-
-      const { error: rowsError } = await supabaseClient.from("purchase_history_rows").insert(rowsPayload);
-      if (rowsError) {
-        setStatus("purchaseStatus", rowsError.message, "error");
-        return;
-      }
-
-      for (const r of validRows) {
-        const article = state.articles.find(a => a.id === r.article_id);
-        if (!article) continue;
-        const { error } = await supabaseClient
-          .from("articles")
-          .update({
-            stock: Number(article.stock || 0) + Number(r.quantity || 0),
-            purchase_price_net: Number(r.purchase_price_net || article.purchase_price_net || 0),
-            sale_price_net: Number(r.sale_price_net || article.sale_price_net || 0),
-            last_supplier_id: supplier_id,
-            last_purchase_date: date
-          })
-          .eq("id", article.id);
-
-        if (error) {
-          setStatus("purchaseStatus", error.message, "error");
-          return;
-        }
-      }
-
-      state.purchaseEditorRows = [];
-      document.getElementById("purchaseSupplier").value = "";
-      document.getElementById("purchaseDocument").value = "";
-      document.getElementById("purchaseDate").value = new Date().toISOString().slice(0,10);
-      setStatus("purchaseStatus", "Carico merce salvato.", "ok");
-      await Promise.all([loadArticles(), loadPurchases(), loadPurchaseRowsHistory()]);
-      renderAll();
+    if (editingArticleId) {
+      ({ error } = await supabaseClient.from("articles").update(payload).eq("id", editingArticleId));
+    } else {
+      ({ error } = await supabaseClient.from("articles").insert(payload));
     }
 
-    function addArticleToJob(articleId) {
-      const article = state.articles.find(a => a.id === articleId);
-      if (!article) return;
-      state.jobEditorRows.push({
-        id: makeLocalId(),
-        row_type: "articolo_magazzino",
-        article_id: article.id,
-        operator_id: null,
-        operator_name: "",
-        description: article.description,
-        quantity: 1,
-        purchase_price_net: Number(article.purchase_price_net || 0),
-        sale_price_net: Number(article.sale_price_net || 0),
-        supplier_id: article.last_supplier_id || null,
-        last_purchase_date: article.last_purchase_date || null
-      });
-      document.getElementById("jobArticleSearch").value = "";
-      renderJobMatches();
-      renderJobEditorRows();
-      renderJobSummary();
+    if (error) {
+      setStatus("articleStatus", error.message, "error");
+      return;
     }
 
-    function addLaborRow() {
-      const operatorId = document.getElementById("jobOperator").value;
-      const operator = state.operators.find(o => o.id === operatorId);
-      state.jobEditorRows.push({
-        id: makeLocalId(),
-        row_type: "manodopera",
-        article_id: null,
-        operator_id: operator?.id || null,
-        operator_name: operator?.name || "",
-        description: "Manodopera",
-        quantity: 1,
-        purchase_price_net: Number(operator?.hourly_cost || 0),
-        sale_price_net: 35,
-        supplier_id: null,
-        last_purchase_date: null
-      });
-      renderJobEditorRows();
-      renderJobSummary();
+    [
+      "articleCode","articleDescription","articleBrand","articleCategory",
+      "articleStock","articleMinStock","articleSalePrice","articlePurchasePrice","articleLastDate"
+    ].forEach(id => document.getElementById(id).value = "");
+
+    document.getElementById("articleUnit").value = "pz";
+    document.getElementById("articleSupplier").value = "";
+
+    editingArticleId = null;
+
+    setStatus("articleStatus", "Articolo salvato correttamente.", "ok");
+
+    await loadArticles();
+    renderAll();
+  }
+
+  function addPurchaseRow() {
+    state.purchaseEditorRows.push({
+      id: makeLocalId(),
+      article_id: "",
+      quantity: "",
+      purchase_price_net: "",
+      sale_price_net: ""
+    });
+
+    renderPurchaseEditorRows();
+  }
+
+  function updatePurchaseEditorRow(id, field, value) {
+    const row = state.purchaseEditorRows.find(r => r.id === id);
+    if (!row) return;
+    row[field] = value;
+  }
+
+  function removePurchaseEditorRow(id) {
+    state.purchaseEditorRows = state.purchaseEditorRows.filter(r => r.id !== id);
+    renderPurchaseEditorRows();
+  }
+
+  async function savePurchase() {
+    setStatus("purchaseStatus", "Salvataggio carico...");
+
+    const supplier_id = document.getElementById("purchaseSupplier").value;
+    const date = document.getElementById("purchaseDate").value;
+    const document_number = document.getElementById("purchaseDocument").value.trim() || null;
+    const validRows = state.purchaseEditorRows.filter(r => r.article_id && Number(r.quantity) > 0);
+
+    if (!supplier_id) {
+      setStatus("purchaseStatus", "Seleziona il fornitore.", "error");
+      return;
     }
 
-    function updateJobEditorRow(id, field, value) {
-      const row = state.jobEditorRows.find(r => r.id === id);
-      if (!row) return;
-      if (field === "quantity" || field === "purchase_price_net" || field === "sale_price_net") {
-        row[field] = Number(value || 0);
-      } else {
-        row[field] = value;
-      }
-      renderJobSummary();
+    if (validRows.length === 0) {
+      setStatus("purchaseStatus", "Inserisci almeno una riga valida.", "error");
+      return;
     }
 
-    function removeJobEditorRow(id) {
-      state.jobEditorRows = state.jobEditorRows.filter(r => r.id !== id);
-      renderJobEditorRows();
-      renderJobSummary();
+    const total_net = validRows.reduce((acc, r) => acc + Number(r.quantity || 0) * Number(r.purchase_price_net || 0), 0);
+
+    const { data: purchase, error: purchaseError } = await supabaseClient
+      .from("purchase_history")
+      .insert({ date, supplier_id, document_number, total_net })
+      .select("*")
+      .single();
+
+    if (purchaseError) {
+      setStatus("purchaseStatus", purchaseError.message, "error");
+      return;
     }
 
-    async function saveJob() {
-      setStatus("jobStatus", "Salvataggio commessa...");
-      const client_id = document.getElementById("jobClient").value;
-      const vehicle_id = document.getElementById("jobType").value === "riparazione" ? (document.getElementById("jobVehicle").value || null) : null;
-      const type = document.getElementById("jobType").value;
-
-      if (!client_id) {
-        setStatus("jobStatus", "Seleziona il cliente.", "error");
-        return;
-      }
-      if (state.jobEditorRows.length === 0) {
-        setStatus("jobStatus", "Inserisci almeno una riga in commessa.", "error");
-        return;
-      }
-
-      const imponibile = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * Number(row.sale_price_net || 0), 0);
-      const vat = imponibile * IVA_DEFAULT / 100;
-      const total_gross = imponibile + vat;
-      const margin = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * (Number(row.sale_price_net || 0) - Number(row.purchase_price_net || 0)), 0);
-      const number = `${new Date().getFullYear()}-${String(state.jobs.length + 1).padStart(4,"0")}`;
-
-      const { data: job, error: jobError } = await supabaseClient
-        .from("jobs")
-        .insert({
-          number,
-          date: new Date().toISOString().slice(0,10),
-          type,
-          status: "chiusa",
-          client_id,
-          vehicle_id,
-          imponibile,
-          vat,
-          total_gross,
-          margin,
-          closed_at: new Date().toISOString()
-        })
-        .select("*")
-        .single();
-
-      if (jobError) {
-        setStatus("jobStatus", jobError.message, "error");
-        return;
-      }
-
-      const rowsPayload = state.jobEditorRows.map(r => ({
-        job_id: job.id,
-        row_type: r.row_type,
+    const rowsPayload = validRows.map(r => {
+      const article = state.articles.find(a => a.id === r.article_id);
+      return {
+        purchase_history_id: purchase.id,
         article_id: r.article_id,
-        operator_id: r.operator_id,
-        operator_name: r.operator_name || null,
-        description: r.description,
+        code: article?.code || "",
+        description: article?.description || "",
         quantity: Number(r.quantity || 0),
         purchase_price_net: Number(r.purchase_price_net || 0),
         sale_price_net: Number(r.sale_price_net || 0),
-        supplier_id: r.supplier_id,
-        last_purchase_date: r.last_purchase_date
-      }));
+        total_net: Number(r.quantity || 0) * Number(r.purchase_price_net || 0)
+      };
+    });
 
-      const { error: rowsError } = await supabaseClient.from("job_rows").insert(rowsPayload);
-      if (rowsError) {
-        setStatus("jobStatus", rowsError.message, "error");
+    const { error: rowsError } = await supabaseClient.from("purchase_history_rows").insert(rowsPayload);
+
+    if (rowsError) {
+      setStatus("purchaseStatus", rowsError.message, "error");
+      return;
+    }
+
+    for (const r of validRows) {
+      const article = state.articles.find(a => a.id === r.article_id);
+      if (!article) continue;
+
+      const { error } = await supabaseClient
+        .from("articles")
+        .update({
+          stock: Number(article.stock || 0) + Number(r.quantity || 0),
+          purchase_price_net: Number(r.purchase_price_net || article.purchase_price_net || 0),
+          sale_price_net: Number(r.sale_price_net || article.sale_price_net || 0),
+          last_supplier_id: supplier_id,
+          last_purchase_date: date
+        })
+        .eq("id", article.id);
+
+      if (error) {
+        setStatus("purchaseStatus", error.message, "error");
         return;
       }
-
-      document.getElementById("jobClient").value = "";
-      document.getElementById("jobVehicle").value = "";
-      document.getElementById("jobOperator").value = "";
-      document.getElementById("jobArticleSearch").value = "";
-      state.jobEditorRows = [];
-      setStatus("jobStatus", "Commessa salvata.", "ok");
-      await Promise.all([loadJobs(), loadJobRowsHistory()]);
-      renderAll();
-      switchTab("jobHistory");
     }
 
-    function exportSnapshot() {
-      const payload = {
-        clients: state.clients,
-        suppliers: state.suppliers,
-        vehicles: state.vehicles,
-        operators: state.operators,
-        articles: state.articles,
-        jobs: state.jobs,
-        purchases: state.purchases
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `car-agri-export-${new Date().toISOString().slice(0,10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+    state.purchaseEditorRows = [];
+
+    document.getElementById("purchaseSupplier").value = "";
+    document.getElementById("purchaseDocument").value = "";
+    document.getElementById("purchaseDate").value = new Date().toISOString().slice(0,10);
+
+    setStatus("purchaseStatus", "Carico merce salvato.", "ok");
+
+    await Promise.all([loadArticles(), loadPurchases(), loadPurchaseRowsHistory()]);
+    renderAll();
+  }
+
+  function addArticleToJob(articleId) {
+    const article = state.articles.find(a => a.id === articleId);
+    if (!article) return;
+
+    state.jobEditorRows.push({
+      id: makeLocalId(),
+      row_type: "articolo_magazzino",
+      article_id: article.id,
+      operator_id: null,
+      operator_name: "",
+      description: article.description,
+      quantity: 1,
+      purchase_price_net: Number(article.purchase_price_net || 0),
+      sale_price_net: Number(article.sale_price_net || 0),
+      supplier_id: article.last_supplier_id || null,
+      last_purchase_date: article.last_purchase_date || null
+    });
+
+    document.getElementById("jobArticleSearch").value = "";
+
+    renderJobMatches();
+    renderJobEditorRows();
+    renderJobSummary();
+  }
+
+  function addLaborRow() {
+    const operatorId = document.getElementById("jobOperator").value;
+    const operator = state.operators.find(o => o.id === operatorId);
+
+    state.jobEditorRows.push({
+      id: makeLocalId(),
+      row_type: "manodopera",
+      article_id: null,
+      operator_id: operator?.id || null,
+      operator_name: operator?.name || "",
+      description: "Manodopera",
+      quantity: 1,
+      purchase_price_net: Number(operator?.hourly_cost || 0),
+      sale_price_net: 35,
+      supplier_id: null,
+      last_purchase_date: null
+    });
+
+    renderJobEditorRows();
+    renderJobSummary();
+  }
+
+  function updateJobEditorRow(id, field, value) {
+    const row = state.jobEditorRows.find(r => r.id === id);
+    if (!row) return;
+
+    if (field === "quantity" || field === "purchase_price_net" || field === "sale_price_net") {
+      row[field] = Number(value || 0);
+    } else {
+      row[field] = value;
     }
 
-    document.getElementById("loginBtn").addEventListener("click", login);
-    document.getElementById("registerBtn").addEventListener("click", registerUser);
-    document.getElementById("logoutBtn").addEventListener("click", logout);
-    document.getElementById("refreshAllBtn").addEventListener("click", refreshAll);
-    document.getElementById("exportBtn").addEventListener("click", exportSnapshot);
+    renderJobSummary();
+  }
 
-    document.getElementById("saveClientBtn").addEventListener("click", saveClient);
-    document.getElementById("saveSupplierBtn").addEventListener("click", saveSupplier);
-    document.getElementById("saveVehicleBtn").addEventListener("click", saveVehicle);
-    document.getElementById("saveOperatorBtn").addEventListener("click", saveOperator);
-    document.getElementById("saveArticleBtn").addEventListener("click", saveArticle);
+  function removeJobEditorRow(id) {
+    state.jobEditorRows = state.jobEditorRows.filter(r => r.id !== id);
+    renderJobEditorRows();
+    renderJobSummary();
+  }
 
-    document.getElementById("addPurchaseRowBtn").addEventListener("click", addPurchaseRow);
-    document.getElementById("savePurchaseBtn").addEventListener("click", savePurchase);
+  async function saveJob() {
+    setStatus("jobStatus", "Salvataggio commessa...");
 
-    document.getElementById("purchaseFilterMonth").addEventListener("change", renderPurchaseHistory);
-    document.getElementById("purchaseFilterSupplier").addEventListener("change", renderPurchaseHistory);
+    const client_id = document.getElementById("jobClient").value;
+    const vehicle_id = document.getElementById("jobType").value === "riparazione" ? (document.getElementById("jobVehicle").value || null) : null;
+    const type = document.getElementById("jobType").value;
 
-    document.getElementById("jobClient").addEventListener("change", renderJobSelectors);
-    document.getElementById("jobType").addEventListener("change", renderJobSelectors);
-    document.getElementById("jobArticleSearch").addEventListener("input", renderJobMatches);
-    document.getElementById("addLaborRowBtn").addEventListener("click", addLaborRow);
-    document.getElementById("saveJobBtn").addEventListener("click", saveJob);
+    if (!client_id) {
+      setStatus("jobStatus", "Seleziona il cliente.", "error");
+      return;
+    }
 
-    window.updatePurchaseEditorRow = updatePurchaseEditorRow;
-    window.removePurchaseEditorRow = removePurchaseEditorRow;
-    window.addArticleToJob = addArticleToJob;
-    window.updateJobEditorRow = updateJobEditorRow;
-    window.removeJobEditorRow = removeJobEditorRow;
-    window.editClient = editClient;
-    window.editSupplier = editSupplier;
-    window.editArticle = editArticle;
+    if (state.jobEditorRows.length === 0) {
+      setStatus("jobStatus", "Inserisci almeno una riga in commessa.", "error");
+      return;
+    }
 
-    boot();
-  </script>
+    const imponibile = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * Number(row.sale_price_net || 0), 0);
+    const vat = imponibile * IVA_DEFAULT / 100;
+    const total_gross = imponibile + vat;
+    const margin = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * (Number(row.sale_price_net || 0) - Number(row.purchase_price_net || 0)), 0);
+    const number = `${new Date().getFullYear()}-${String(state.jobs.length + 1).padStart(4,"0")}`;
+
+    const { data: job, error: jobError } = await supabaseClient
+      .from("jobs")
+      .insert({
+        number,
+        date: new Date().toISOString().slice(0,10),
+        type,
+        status: "chiusa",
+        client_id,
+        vehicle_id,
+        imponibile,
+        vat,
+        total_gross,
+        margin,
+        closed_at: new Date().toISOString()
+      })
+      .select("*")
+      .single();
+
+    if (jobError) {
+      setStatus("jobStatus", jobError.message, "error");
+      return;
+    }
+
+    const rowsPayload = state.jobEditorRows.map(r => ({
+      job_id: job.id,
+      row_type: r.row_type,
+      article_id: r.article_id,
+      operator_id: r.operator_id,
+      operator_name: r.operator_name || null,
+      description: r.description,
+      quantity: Number(r.quantity || 0),
+      purchase_price_net: Number(r.purchase_price_net || 0),
+      sale_price_net: Number(r.sale_price_net || 0),
+      supplier_id: r.supplier_id,
+      last_purchase_date: r.last_purchase_date
+    }));
+
+    const { error: rowsError } = await supabaseClient.from("job_rows").insert(rowsPayload);
+
+    if (rowsError) {
+      setStatus("jobStatus", rowsError.message, "error");
+      return;
+    }
+
+    document.getElementById("jobClient").value = "";
+    document.getElementById("jobVehicle").value = "";
+    document.getElementById("jobOperator").value = "";
+    document.getElementById("jobArticleSearch").value = "";
+
+    state.jobEditorRows = [];
+
+    setStatus("jobStatus", "Commessa salvata.", "ok");
+
+    await Promise.all([loadJobs(), loadJobRowsHistory()]);
+
+    renderAll();
+    switchTab("jobHistory");
+  }
+
+  function exportSnapshot() {
+    const payload = {
+      clients: state.clients,
+      suppliers: state.suppliers,
+      vehicles: state.vehicles,
+      operators: state.operators,
+      articles: state.articles,
+      jobs: state.jobs,
+      purchases: state.purchases
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = `car-agri-export-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("loginBtn").addEventListener("click", login);
+  document.getElementById("registerBtn").addEventListener("click", registerUser);
+  document.getElementById("logoutBtn").addEventListener("click", logout);
+  document.getElementById("refreshAllBtn").addEventListener("click", refreshAll);
+  document.getElementById("exportBtn").addEventListener("click", exportSnapshot);
+
+  document.getElementById("saveClientBtn").addEventListener("click", saveClient);
+  document.getElementById("saveSupplierBtn").addEventListener("click", saveSupplier);
+  document.getElementById("saveVehicleBtn").addEventListener("click", saveVehicle);
+  document.getElementById("saveOperatorBtn").addEventListener("click", saveOperator);
+  document.getElementById("saveArticleBtn").addEventListener("click", saveArticle);
+
+  document.getElementById("addPurchaseRowBtn").addEventListener("click", addPurchaseRow);
+  document.getElementById("savePurchaseBtn").addEventListener("click", savePurchase);
+
+  document.getElementById("purchaseFilterMonth").addEventListener("change", renderPurchaseHistory);
+  document.getElementById("purchaseFilterSupplier").addEventListener("change", renderPurchaseHistory);
+
+  document.getElementById("jobClient").addEventListener("change", renderJobSelectors);
+  document.getElementById("jobType").addEventListener("change", renderJobSelectors);
+  document.getElementById("jobArticleSearch").addEventListener("input", renderJobMatches);
+  document.getElementById("addLaborRowBtn").addEventListener("click", addLaborRow);
+  document.getElementById("saveJobBtn").addEventListener("click", saveJob);
+
+  window.updatePurchaseEditorRow = updatePurchaseEditorRow;
+  window.removePurchaseEditorRow = removePurchaseEditorRow;
+  window.addArticleToJob = addArticleToJob;
+  window.updateJobEditorRow = updateJobEditorRow;
+  window.removeJobEditorRow = removeJobEditorRow;
+  window.editClient = editClient;
+  window.editSupplier = editSupplier;
+  window.editArticle = editArticle;
+
+  boot();
+</script>
 </body>
 </html>
