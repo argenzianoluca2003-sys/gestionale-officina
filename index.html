@@ -890,7 +890,20 @@ function renderClients() {
     </tr>
   `).join("") || `<tr><td colspan="7">Nessun cliente</td></tr>`;
 }
+function editClient(id) {
+  const c = state.clients.find(x => x.id === id);
+  if (!c) return;
 
+  editingClientId = id;
+
+  document.getElementById("clientName").value = c.name || "";
+  document.getElementById("clientType").value = c.type || "azienda";
+  document.getElementById("clientPhone").value = c.phone || "";
+  document.getElementById("clientVat").value = c.vat_number || "";
+  document.getElementById("clientAddress").value = c.address || "";
+  document.getElementById("clientSdi").value = c.sdi || "";
+}
+    
     function renderSuppliers() {
       document.getElementById("suppliersTable").innerHTML = state.suppliers.map(s => `
         <tr>
