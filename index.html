@@ -873,8 +873,7 @@
       }).join("") || `<tr><td colspan="4" class="muted">Nessuna commessa.</td></tr>`;
     }
 
-    function renderClients() {
-    let editingClientId = null;
+   let editingClientId = null;
 
 function renderClients() {
   document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
