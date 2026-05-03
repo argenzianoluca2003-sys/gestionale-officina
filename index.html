@@ -874,17 +874,23 @@
     }
 
     function renderClients() {
-      document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
-        <tr>
-          <td>${safe(c.name)}</td>
-          <td>${safe(c.type || "-")}</td>
-          <td>${safe(c.phone || "-")}</td>
-          <td>${safe(c.vat_number || "-")}</td>
-          <td>${safe(c.address || "-")}</td>
-          <td>${safe(c.sdi || "-")}</td>
-        </tr>
-      `).join("") || `<tr><td colspan="6" class="muted">Nessun cliente.</td></tr>`;
-    }
+    let editingClientId = null;
+
+function renderClients() {
+  document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
+    <tr>
+      <td>${safe(c.name)}</td>
+      <td>${safe(c.type || "-")}</td>
+      <td>${safe(c.phone || "-")}</td>
+      <td>${safe(c.vat_number || "-")}</td>
+      <td>${safe(c.address || "-")}</td>
+      <td>${safe(c.sdi || "-")}</td>
+      <td>
+        <button class="small-btn" onclick="editClient('${c.id}')">Modifica</button>
+      </td>
+    </tr>
+  `).join("") || `<tr><td colspan="7">Nessun cliente</td></tr>`;
+}
 
     function renderSuppliers() {
       document.getElementById("suppliersTable").innerHTML = state.suppliers.map(s => `
