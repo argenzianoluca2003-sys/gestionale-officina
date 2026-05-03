@@ -1,1 +1,56 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Car-Agri Login</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial; background:#f5f7fb; padding:30px; }
+    .card { max-width:420px; margin:auto; background:white; padding:25px; border-radius:14px; }
+    input, button { width:100%; padding:12px; margin-top:10px; border-radius:10px; border:1px solid #ddd; }
+    button { background:#111; color:white; cursor:pointer; }
+    #msg { margin-top:12px; color:#b91c1c; }
+  </style>
+</head>
+<body>
 
+<div class="card">
+  <h2>Car-Agri Cloud</h2>
+  <input id="email" type="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
+  <button id="loginBtn">Accedi</button>
+  <p id="msg"></p>
+</div>
+
+<script>
+const supabaseClient = window.supabase.createClient(
+  "https://aomvnfxupelnhxnoobve.supabase.co",
+  "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl"
+);
+
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  document.getElementById("msg").style.color = "#111";
+  document.getElementById("msg").innerText = "Accesso in corso...";
+
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if (error) {
+    document.getElementById("msg").style.color = "#b91c1c";
+    document.getElementById("msg").innerText = error.message;
+    return;
+  }
+
+  document.getElementById("msg").style.color = "#166534";
+  document.getElementById("msg").innerText = "Login effettuato correttamente.";
+  console.log("SESSIONE:", data);
+});
+</script>
+
+</body>
+</html>
