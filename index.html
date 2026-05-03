@@ -13,19 +13,18 @@
       --muted:#64748b;
       --border:#e2e8f0;
       --primary:#0f172a;
-      --primary-2:#1e293b;
       --primary-text:#ffffff;
       --danger:#b91c1c;
       --success:#166534;
-      --soft:#eef2ff;
       --warning:#92400e;
-      --shadow:0 10px 25px rgba(15,23,42,.06);
+      --soft:#eef2ff;
+      --shadow:0 10px 24px rgba(15,23,42,.06);
       --radius:18px;
     }
     *{box-sizing:border-box}
     html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
     body{min-height:100vh}
-    .container{max-width:1380px;margin:0 auto;padding:18px}
+    .container{max-width:1400px;margin:0 auto;padding:18px}
     .card{
       background:var(--card);
       border:1px solid var(--border);
@@ -48,15 +47,12 @@
     .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
     .grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
     .grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
-    .grid-5{grid-template-columns:repeat(5,minmax(0,1fr))}
     @media (max-width:1050px){
-      .grid-2,.grid-3,.grid-4,.grid-5{grid-template-columns:1fr}
+      .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
       .layout-main{grid-template-columns:1fr!important}
     }
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .row > *{min-width:0}
     .space-between{justify-content:space-between}
-    .align-start{align-items:flex-start}
     input,select,button,textarea{
       width:100%;
       min-height:42px;
@@ -66,7 +62,6 @@
       font-size:14px;
       background:#fff;
     }
-    textarea{min-height:90px;resize:vertical}
     button{
       cursor:pointer;
       border:0;
@@ -79,14 +74,14 @@
       color:var(--text);
       border:1px solid var(--border);
     }
-    button.ghost{
-      background:transparent;
-      color:var(--text);
-      border:1px dashed var(--border);
-    }
     button.danger{background:var(--danger)}
-    button.success{background:var(--success)}
-    button.small-btn{min-height:34px;padding:6px 10px;font-size:12px;border-radius:10px}
+    button.small-btn{
+      min-height:34px;
+      padding:6px 10px;
+      font-size:12px;
+      border-radius:10px;
+      width:auto;
+    }
     .hidden{display:none!important}
     .pill{
       display:inline-flex;
@@ -96,7 +91,6 @@
       border-radius:999px;
       background:var(--soft);
       font-size:12px;
-      color:var(--primary);
       border:1px solid #dbe4ff;
     }
     .topbar{
@@ -285,12 +279,7 @@
 
       <div id="clients" class="section">
         <div class="card">
-          <div class="row space-between">
-            <div>
-              <h2>Clienti</h2>
-              <p class="muted small">Gestione clienti azienda e privati.</p>
-            </div>
-          </div>
+          <h2>Clienti</h2>
           <div class="grid grid-3" style="margin-top:12px;">
             <input id="clientName" placeholder="Nome / Ragione sociale" />
             <select id="clientType">
@@ -319,6 +308,7 @@
                   <th>P.IVA</th>
                   <th>Indirizzo</th>
                   <th>SDI</th>
+                  <th>Azioni</th>
                 </tr>
               </thead>
               <tbody id="clientsTable"></tbody>
@@ -353,6 +343,7 @@
                   <th>Telefono</th>
                   <th>Email</th>
                   <th>P.IVA</th>
+                  <th>Azioni</th>
                 </tr>
               </thead>
               <tbody id="suppliersTable"></tbody>
@@ -463,6 +454,7 @@
                   <th>Vendita</th>
                   <th>Acquisto</th>
                   <th>Ultimo fornitore</th>
+                  <th>Azioni</th>
                 </tr>
               </thead>
               <tbody id="articlesTable"></tbody>
@@ -633,6 +625,10 @@
       purchaseEditorRows: [],
       jobEditorRows: []
     };
+
+    let editingClientId = null;
+    let editingSupplierId = null;
+    let editingArticleId = null;
 
     function setStatus(id, text, type = "") {
       const el = document.getElementById(id);
@@ -846,8 +842,7 @@
     }
 
     function renderDashboard() {
-      const dashPurchases = document.getElementById("dashboardPurchases");
-      dashPurchases.innerHTML = state.purchases.slice(0, 5).map(p => {
+      document.getElementById("dashboardPurchases").innerHTML = state.purchases.slice(0, 5).map(p => {
         const supplier = state.suppliers.find(s => s.id === p.supplier_id);
         return `
           <tr>
@@ -859,8 +854,7 @@
         `;
       }).join("") || `<tr><td colspan="4" class="muted">Nessun carico.</td></tr>`;
 
-      const dashJobs = document.getElementById("dashboardJobs");
-      dashJobs.innerHTML = state.jobs.slice(0, 5).map(j => {
+      document.getElementById("dashboardJobs").innerHTML = state.jobs.slice(0, 5).map(j => {
         const client = state.clients.find(c => c.id === j.client_id);
         return `
           <tr>
@@ -873,37 +867,20 @@
       }).join("") || `<tr><td colspan="4" class="muted">Nessuna commessa.</td></tr>`;
     }
 
-   let editingClientId = null;
+    function renderClients() {
+      document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
+        <tr>
+          <td>${safe(c.name)}</td>
+          <td>${safe(c.type || "-")}</td>
+          <td>${safe(c.phone || "-")}</td>
+          <td>${safe(c.vat_number || "-")}</td>
+          <td>${safe(c.address || "-")}</td>
+          <td>${safe(c.sdi || "-")}</td>
+          <td><button class="secondary small-btn" onclick="editClient('${c.id}')">Modifica</button></td>
+        </tr>
+      `).join("") || `<tr><td colspan="7" class="muted">Nessun cliente.</td></tr>`;
+    }
 
-function renderClients() {
-  document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
-    <tr>
-      <td>${safe(c.name)}</td>
-      <td>${safe(c.type || "-")}</td>
-      <td>${safe(c.phone || "-")}</td>
-      <td>${safe(c.vat_number || "-")}</td>
-      <td>${safe(c.address || "-")}</td>
-      <td>${safe(c.sdi || "-")}</td>
-      <td>
-        <button class="small-btn" onclick="editClient('${c.id}')">Modifica</button>
-      </td>
-    </tr>
-  `).join("") || `<tr><td colspan="7">Nessun cliente</td></tr>`;
-}
-function editClient(id) {
-  const c = state.clients.find(x => x.id === id);
-  if (!c) return;
-
-  editingClientId = id;
-
-  document.getElementById("clientName").value = c.name || "";
-  document.getElementById("clientType").value = c.type || "azienda";
-  document.getElementById("clientPhone").value = c.phone || "";
-  document.getElementById("clientVat").value = c.vat_number || "";
-  document.getElementById("clientAddress").value = c.address || "";
-  document.getElementById("clientSdi").value = c.sdi || "";
-}
-    
     function renderSuppliers() {
       document.getElementById("suppliersTable").innerHTML = state.suppliers.map(s => `
         <tr>
@@ -912,8 +889,9 @@ function editClient(id) {
           <td>${safe(s.phone || "-")}</td>
           <td>${safe(s.email || "-")}</td>
           <td>${safe(s.vat_number || "-")}</td>
+          <td><button class="secondary small-btn" onclick="editSupplier('${s.id}')">Modifica</button></td>
         </tr>
-      `).join("") || `<tr><td colspan="5" class="muted">Nessun fornitore.</td></tr>`;
+      `).join("") || `<tr><td colspan="6" class="muted">Nessun fornitore.</td></tr>`;
     }
 
     function renderVehicles() {
@@ -954,9 +932,10 @@ function editClient(id) {
             <td>${euro(a.sale_price_net)}</td>
             <td>${euro(a.purchase_price_net)}</td>
             <td>${safe(supplier?.name || "-")}</td>
+            <td><button class="secondary small-btn" onclick="editArticle('${a.id}')">Modifica</button></td>
           </tr>
         `;
-      }).join("") || `<tr><td colspan="7" class="muted">Nessun articolo.</td></tr>`;
+      }).join("") || `<tr><td colspan="8" class="muted">Nessun articolo.</td></tr>`;
     }
 
     function renderPurchaseSelectors() {
@@ -971,8 +950,7 @@ function editClient(id) {
 
     function renderPurchaseEditorRows() {
       document.getElementById("purchaseDate").value ||= new Date().toISOString().slice(0, 10);
-      const tbody = document.getElementById("purchaseRowsTable");
-      tbody.innerHTML = state.purchaseEditorRows.map(row => `
+      document.getElementById("purchaseRowsTable").innerHTML = state.purchaseEditorRows.map(row => `
         <tr>
           <td>
             <select onchange="updatePurchaseEditorRow('${row.id}','article_id',this.value)">
@@ -1044,7 +1022,7 @@ function editClient(id) {
               <strong>${safe(a.code)}</strong>
               <div class="small muted">${safe(a.description)}</div>
             </div>
-            <div style="flex:0 0 auto;">
+            <div>
               <button class="small-btn" onclick="addArticleToJob('${a.id}')">Aggiungi</button>
             </div>
           </div>
@@ -1053,8 +1031,7 @@ function editClient(id) {
     }
 
     function renderJobEditorRows() {
-      const tbody = document.getElementById("jobRowsTable");
-      tbody.innerHTML = state.jobEditorRows.map(row => `
+      document.getElementById("jobRowsTable").innerHTML = state.jobEditorRows.map(row => `
         <tr>
           <td><span class="badge">${safe(row.row_type)}</span></td>
           <td><input value="${safe(row.description)}" onchange="updateJobEditorRow('${row.id}','description',this.value)"></td>
@@ -1101,6 +1078,52 @@ function editClient(id) {
       document.getElementById("vehicleBrandsList").innerHTML = vehicleBrands.map(b => `<option value="${safe(b)}"></option>`).join("");
     }
 
+    function editClient(id) {
+      const c = state.clients.find(x => x.id === id);
+      if (!c) return;
+      editingClientId = id;
+      document.getElementById("clientName").value = c.name || "";
+      document.getElementById("clientType").value = c.type || "azienda";
+      document.getElementById("clientPhone").value = c.phone || "";
+      document.getElementById("clientVat").value = c.vat_number || "";
+      document.getElementById("clientAddress").value = c.address || "";
+      document.getElementById("clientSdi").value = c.sdi || "";
+      setStatus("clientStatus", "Stai modificando questo cliente.", "warn");
+      switchTab("clients");
+    }
+
+    function editSupplier(id) {
+      const s = state.suppliers.find(x => x.id === id);
+      if (!s) return;
+      editingSupplierId = id;
+      document.getElementById("supplierName").value = s.name || "";
+      document.getElementById("supplierContact").value = s.contact_name || "";
+      document.getElementById("supplierPhone").value = s.phone || "";
+      document.getElementById("supplierEmail").value = s.email || "";
+      document.getElementById("supplierVat").value = s.vat_number || "";
+      setStatus("supplierStatus", "Stai modificando questo fornitore.", "warn");
+      switchTab("suppliers");
+    }
+
+    function editArticle(id) {
+      const a = state.articles.find(x => x.id === id);
+      if (!a) return;
+      editingArticleId = id;
+      document.getElementById("articleCode").value = a.code || "";
+      document.getElementById("articleDescription").value = a.description || "";
+      document.getElementById("articleBrand").value = a.brand || "";
+      document.getElementById("articleCategory").value = a.category || "";
+      document.getElementById("articleUnit").value = a.unit || "pz";
+      document.getElementById("articleStock").value = a.stock ?? "";
+      document.getElementById("articleMinStock").value = a.min_stock ?? "";
+      document.getElementById("articleSalePrice").value = a.sale_price_net ?? "";
+      document.getElementById("articlePurchasePrice").value = a.purchase_price_net ?? "";
+      document.getElementById("articleLastDate").value = a.last_purchase_date || "";
+      document.getElementById("articleSupplier").value = a.last_supplier_id || "";
+      setStatus("articleStatus", "Stai modificando questo articolo.", "warn");
+      switchTab("articles");
+    }
+
     async function saveClient() {
       setStatus("clientStatus", "Salvataggio...");
       const payload = {
@@ -1115,24 +1138,23 @@ function editClient(id) {
         setStatus("clientStatus", "Inserisci il nome cliente.", "error");
         return;
       }
-      const { error } = let error;
 
-if (editingClientId) {
-  ({ error } = await supabaseClient
-    .from("clients")
-    .update(payload)
-    .eq("id", editingClientId));
-} else {
-  ({ error } = await supabaseClient
-    .from("clients")
-    .insert(payload));
-}
+      let error;
+      if (editingClientId) {
+        ({ error } = await supabaseClient.from("clients").update(payload).eq("id", editingClientId));
+      } else {
+        ({ error } = await supabaseClient.from("clients").insert(payload));
+      }
+
       if (error) {
         setStatus("clientStatus", error.message, "error");
         return;
       }
+
       ["clientName","clientPhone","clientVat","clientAddress","clientSdi"].forEach(id => document.getElementById(id).value = "");
-      setStatus("clientStatus", "Cliente salvato.", "ok");
+      document.getElementById("clientType").value = "azienda";
+      editingClientId = null;
+      setStatus("clientStatus", "Cliente salvato correttamente.", "ok");
       await loadClients();
       renderAll();
     }
@@ -1150,13 +1172,22 @@ if (editingClientId) {
         setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
         return;
       }
-      const { error } = await supabaseClient.from("suppliers").insert(payload);
+
+      let error;
+      if (editingSupplierId) {
+        ({ error } = await supabaseClient.from("suppliers").update(payload).eq("id", editingSupplierId));
+      } else {
+        ({ error } = await supabaseClient.from("suppliers").insert(payload));
+      }
+
       if (error) {
         setStatus("supplierStatus", error.message, "error");
         return;
       }
+
       ["supplierName","supplierContact","supplierPhone","supplierEmail","supplierVat"].forEach(id => document.getElementById(id).value = "");
-      setStatus("supplierStatus", "Fornitore salvato.", "ok");
+      editingSupplierId = null;
+      setStatus("supplierStatus", "Fornitore salvato correttamente.", "ok");
       await loadSuppliers();
       renderAll();
     }
@@ -1228,21 +1259,27 @@ if (editingClientId) {
         setStatus("articleStatus", "Inserisci codice e descrizione.", "error");
         return;
       }
-      const existing = state.articles.find(a => normalizeText(a.code) === normalizeText(payload.code));
+
       let error;
-      if (existing) {
-        ({ error } = await supabaseClient.from("articles").update(payload).eq("id", existing.id));
+      if (editingArticleId) {
+        ({ error } = await supabaseClient.from("articles").update(payload).eq("id", editingArticleId));
       } else {
         ({ error } = await supabaseClient.from("articles").insert(payload));
       }
+
       if (error) {
         setStatus("articleStatus", error.message, "error");
         return;
       }
-      ["articleCode","articleDescription","articleBrand","articleCategory","articleStock","articleMinStock","articleSalePrice","articlePurchasePrice","articleLastDate"].forEach(id => document.getElementById(id).value = "");
+
+      [
+        "articleCode","articleDescription","articleBrand","articleCategory",
+        "articleStock","articleMinStock","articleSalePrice","articlePurchasePrice","articleLastDate"
+      ].forEach(id => document.getElementById(id).value = "");
       document.getElementById("articleUnit").value = "pz";
       document.getElementById("articleSupplier").value = "";
-      setStatus("articleStatus", "Articolo salvato.", "ok");
+      editingArticleId = null;
+      setStatus("articleStatus", "Articolo salvato correttamente.", "ok");
       await loadArticles();
       renderAll();
     }
@@ -1411,6 +1448,7 @@ if (editingClientId) {
       const client_id = document.getElementById("jobClient").value;
       const vehicle_id = document.getElementById("jobType").value === "riparazione" ? (document.getElementById("jobVehicle").value || null) : null;
       const type = document.getElementById("jobType").value;
+
       if (!client_id) {
         setStatus("jobStatus", "Seleziona il cliente.", "error");
         return;
@@ -1528,6 +1566,9 @@ if (editingClientId) {
     window.addArticleToJob = addArticleToJob;
     window.updateJobEditorRow = updateJobEditorRow;
     window.removeJobEditorRow = removeJobEditorRow;
+    window.editClient = editClient;
+    window.editSupplier = editSupplier;
+    window.editArticle = editArticle;
 
     boot();
   </script>
