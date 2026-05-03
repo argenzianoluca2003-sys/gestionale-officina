@@ -1,900 +1,1506 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { createClient, Session } from "@supabase/supabase-js";
-import {
-  Search,
-  Package,
-  Users,
-  Building2,
-  Car,
-  FileText,
-  Plus,
-  X,
-  History,
-  Wallet,
-  UserRound,
-  ScanLine,
-  Download,
-  Upload,
-  Wifi,
-  LogOut,
-  Shield,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-
-const SUPABASE_URL = "https://aomvnfxupelnhxnoobve.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl";
-const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-const IVA_DEFAULT = 22;
-const LOCAL_FALLBACK_KEY = "caragri_cloud_fallback_v1";
-
-type Role = "admin" | "staff" | "viewer";
-
-type Profile = {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  role: Role;
-};
-
-type Client = {
-  id: string;
-  name: string;
-  type: string | null;
-  phone: string | null;
-  vat_number: string | null;
-  address: string | null;
-  sdi: string | null;
-  created_at: string;
-};
-
-type Supplier = {
-  id: string;
-  name: string;
-  contact_name: string | null;
-  phone: string | null;
-  email: string | null;
-  vat_number: string | null;
-  created_at: string;
-};
-
-type Vehicle = {
-  id: string;
-  client_id: string | null;
-  plate: string;
-  brand: string | null;
-  model: string | null;
-  vehicle_type: string | null;
-  vin: string | null;
-  created_at: string;
-};
-
-type Operator = {
-  id: string;
-  name: string;
-  role_name: string | null;
-  hourly_cost: number;
-  created_at: string;
-};
-
-type Article = {
-  id: string;
-  category: string;
-  code: string;
-  description: string;
-  brand: string | null;
-  unit: string;
-  stock: number;
-  min_stock: number;
-  sale_price_net: number;
-  purchase_price_net: number;
-  last_supplier_id: string | null;
-  last_purchase_date: string | null;
-  created_at: string;
-};
-
-type Job = {
-  id: string;
-  number: string;
-  date: string;
-  type: string;
-  status: string;
-  client_id: string | null;
-  vehicle_id: string | null;
-  imponibile: number;
-  vat: number;
-  total_gross: number;
-  margin: number;
-  closed_at: string | null;
-  created_at: string;
-};
-
-type JobRow = {
-  id: string;
-  job_id: string;
-  row_type: string;
-  article_id: string | null;
-  operator_id: string | null;
-  operator_name: string | null;
-  description: string;
-  quantity: number;
-  purchase_price_net: number;
-  sale_price_net: number;
-  supplier_id: string | null;
-  last_purchase_date: string | null;
-  created_at: string;
-};
-
-type PurchaseHistory = {
-  id: string;
-  date: string;
-  supplier_id: string;
-  document_number: string | null;
-  total_net: number;
-  created_at: string;
-};
-
-type PurchaseHistoryRow = {
-  id: string;
-  purchase_history_id: string;
-  article_id: string | null;
-  code: string;
-  description: string;
-  quantity: number;
-  purchase_price_net: number;
-  sale_price_net: number;
-  total_net: number;
-  created_at: string;
-};
-
-type PurchaseEditorRow = {
-  id: string;
-  article_id: string;
-  article_search: string;
-  quantity: string;
-  purchase_price_net: string;
-  sale_price_net: string;
-};
-
-type JobEditorRow = {
-  id: string;
-  row_type: string;
-  article_id: string | null;
-  operator_id: string | null;
-  operator_name: string;
-  description: string;
-  quantity: number;
-  purchase_price_net: number;
-  sale_price_net: number;
-  supplier_id: string | null;
-  last_purchase_date: string | null;
-};
-
-type FallbackData = {
-  clients: Client[];
-  suppliers: Supplier[];
-  vehicles: Vehicle[];
-  operators: Operator[];
-  articles: Article[];
-  jobs: Job[];
-  jobRows: JobRow[];
-  purchases: PurchaseHistory[];
-  purchaseRows: PurchaseHistoryRow[];
-};
-
-const emptyClientForm = {
-  type: "azienda",
-  name: "",
-  phone: "",
-  vat_number: "",
-  address: "",
-  sdi: "",
-};
-
-const emptySupplierForm = {
-  name: "",
-  contact_name: "",
-  phone: "",
-  email: "",
-  vat_number: "",
-};
-
-const emptyVehicleForm = {
-  client_id: "",
-  plate: "",
-  brand: "",
-  model: "",
-  vehicle_type: "",
-  vin: "",
-};
-
-const emptyOperatorForm = {
-  name: "",
-  role_name: "",
-  hourly_cost: "",
-};
-
-const emptyArticleForm = {
-  category: "",
-  code: "",
-  description: "",
-  brand: "",
-  unit: "pz",
-  stock: "",
-  min_stock: "",
-  sale_price_net: "",
-  purchase_price_net: "",
-  last_purchase_date: "",
-  last_supplier_id: "",
-};
-
-function euro(value: number | string) {
-  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value || 0));
-}
-
-function normalizeText(value: unknown) {
-  return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-function labelOrEmpty(value: string | number) {
-  return value === "" || value === 0 ? "" : String(value);
-}
-
-function makeLocalId() {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-}
-
-function getNextJobNumber(jobs: Job[]) {
-  const year = new Date().getFullYear();
-  const progressive = String(jobs.length + 1).padStart(4, "0");
-  return `${year}-${progressive}`;
-}
-
-export default function CarAgriGestionaleCloud() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [authError, setAuthError] = useState("");
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loadingData, setLoadingData] = useState(false);
-  const [cloudStatus, setCloudStatus] = useState<"online" | "offline">("online");
-
-  const [clients, setClients] = useState<Client[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [operators, setOperators] = useState<Operator[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [jobRows, setJobRows] = useState<JobRow[]>([]);
-  const [purchases, setPurchases] = useState<PurchaseHistory[]>([]);
-  const [purchaseRowsHistory, setPurchaseRowsHistory] = useState<PurchaseHistoryRow[]>([]);
-
-  const [clientForm, setClientForm] = useState(emptyClientForm);
-  const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
-  const [vehicleForm, setVehicleForm] = useState(emptyVehicleForm);
-  const [operatorForm, setOperatorForm] = useState(emptyOperatorForm);
-  const [articleForm, setArticleForm] = useState(emptyArticleForm);
-
-  const [showClientForm, setShowClientForm] = useState(false);
-  const [showSupplierForm, setShowSupplierForm] = useState(false);
-  const [showVehicleForm, setShowVehicleForm] = useState(false);
-  const [showOperatorForm, setShowOperatorForm] = useState(false);
-  const [showArticleForm, setShowArticleForm] = useState(false);
-
-  const [selectedClientId, setSelectedClientId] = useState("");
-  const [selectedVehicleId, setSelectedVehicleId] = useState("");
-  const [selectedOperatorId, setSelectedOperatorId] = useState("");
-  const [jobType, setJobType] = useState<"riparazione" | "banco">("riparazione");
-  const [jobArticleSearch, setJobArticleSearch] = useState("");
-  const [jobEditorRows, setJobEditorRows] = useState<JobEditorRow[]>([]);
-
-  const [purchaseHeader, setPurchaseHeader] = useState({
-    supplier_id: "",
-    data: new Date().toISOString().slice(0, 10),
-    document_number: "",
-  });
-  const [purchaseRowsEditor, setPurchaseRowsEditor] = useState<PurchaseEditorRow[]>([]);
-  const [purchaseMonthFilter, setPurchaseMonthFilter] = useState("");
-  const [purchaseSupplierFilter, setPurchaseSupplierFilter] = useState("all");
-
-  const isViewer = profile?.role === "viewer";
-
-  const selectedClient = useMemo(() => clients.find((item) => item.id === selectedClientId) || null, [clients, selectedClientId]);
-  const selectedVehicle = useMemo(() => vehicles.find((item) => item.id === selectedVehicleId) || null, [vehicles, selectedVehicleId]);
-  const selectedOperator = useMemo(() => operators.find((item) => item.id === selectedOperatorId) || null, [operators, selectedOperatorId]);
-  const clientVehicles = useMemo(() => vehicles.filter((item) => item.client_id === selectedClientId), [vehicles, selectedClientId]);
-  const inventoryValue = useMemo(() => articles.reduce((acc, item) => acc + Number(item.stock || 0) * Number(item.purchase_price_net || 0), 0), [articles]);
-  const savedArticleBrands = useMemo(() => Array.from(new Set(articles.map((item) => item.brand?.trim()).filter(Boolean) as string[])).sort(), [articles]);
-  const savedVehicleBrands = useMemo(() => Array.from(new Set(vehicles.map((item) => item.brand?.trim()).filter(Boolean) as string[])).sort(), [vehicles]);
-
-  const articleMatchesInJob = useMemo(() => {
-    const query = normalizeText(jobArticleSearch);
-    if (!query) return [] as Article[];
-    return articles.filter((item) => normalizeText(item.code).includes(query) || normalizeText(item.description).includes(query)).slice(0, 8);
-  }, [articles, jobArticleSearch]);
-
-  const filteredPurchases = useMemo(() => {
-    return purchases.filter((entry) => {
-      const monthOk = purchaseMonthFilter ? entry.date.startsWith(purchaseMonthFilter) : true;
-      const supplierOk = purchaseSupplierFilter === "all" ? true : entry.supplier_id === purchaseSupplierFilter;
-      return monthOk && supplierOk;
-    });
-  }, [purchases, purchaseMonthFilter, purchaseSupplierFilter]);
-
-  const jobTotals = useMemo(() => {
-    const imponibile = jobEditorRows.reduce((acc, row) => acc + row.quantity * row.sale_price_net, 0);
-    const vat = (imponibile * IVA_DEFAULT) / 100;
-    const total = imponibile + vat;
-    const margin = jobEditorRows.reduce((acc, row) => acc + row.quantity * (row.sale_price_net - row.purchase_price_net), 0);
-    return { imponibile, vat, total, margin };
-  }, [jobEditorRows]);
-
-  const groupedPurchaseRows = useMemo(() => {
-    return filteredPurchases.map((purchase) => ({
-      purchase,
-      rows: purchaseRowsHistory.filter((row) => row.purchase_history_id === purchase.id),
-      supplierName: suppliers.find((supplier) => supplier.id === purchase.supplier_id)?.name || "Fornitore",
-    }));
-  }, [filteredPurchases, purchaseRowsHistory, suppliers]);
-
-  const fallbackSave = (data: FallbackData) => {
-    window.localStorage.setItem(LOCAL_FALLBACK_KEY, JSON.stringify(data));
-  };
-
-  const fallbackLoad = () => {
-    const raw = window.localStorage.getItem(LOCAL_FALLBACK_KEY);
-    if (!raw) return;
-    try {
-      const parsed: FallbackData = JSON.parse(raw);
-      setClients(parsed.clients || []);
-      setSuppliers(parsed.suppliers || []);
-      setVehicles(parsed.vehicles || []);
-      setOperators(parsed.operators || []);
-      setArticles(parsed.articles || []);
-      setJobs(parsed.jobs || []);
-      setJobRows(parsed.jobRows || []);
-      setPurchases(parsed.purchases || []);
-      setPurchaseRowsHistory(parsed.purchaseRows || []);
-      setCloudStatus("offline");
-    } catch {
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Car-Agri Cloud Gestionale</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --bg:#f6f8fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --border:#e2e8f0;
+      --primary:#0f172a;
+      --primary-2:#1e293b;
+      --primary-text:#ffffff;
+      --danger:#b91c1c;
+      --success:#166534;
+      --soft:#eef2ff;
+      --warning:#92400e;
+      --shadow:0 10px 25px rgba(15,23,42,.06);
+      --radius:18px;
     }
-  };
-
-  const persistFallbackSnapshot = () => {
-    fallbackSave({
-      clients,
-      suppliers,
-      vehicles,
-      operators,
-      articles,
-      jobs,
-      jobRows,
-      purchases,
-      purchaseRows: purchaseRowsHistory,
-    });
-  };
-
-  useEffect(() => {
-    const boot = async () => {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session);
-      setLoadingAuth(false);
-    };
-    boot();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setSession(currentSession);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (!session) {
-      setProfile(null);
-      return;
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
+    body{min-height:100vh}
+    .container{max-width:1380px;margin:0 auto;padding:18px}
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:16px;
+      margin-bottom:16px;
     }
-    fetchAllData();
-  }, [session]);
-
-  const ensureProfile = async (userId: string, userEmail: string | null) => {
-    const { data: existing } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-    if (existing) {
-      setProfile(existing as Profile);
-      return;
+    h1,h2,h3,h4,p{margin:0}
+    h1{font-size:28px}
+    h2{font-size:20px;margin-bottom:12px}
+    h3{font-size:16px;margin-bottom:8px}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+    .status{min-height:20px;font-size:13px;margin-top:8px}
+    .status.error{color:var(--danger)}
+    .status.ok{color:var(--success)}
+    .status.warn{color:var(--warning)}
+    .grid{display:grid;gap:12px}
+    .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .grid-5{grid-template-columns:repeat(5,minmax(0,1fr))}
+    @media (max-width:1050px){
+      .grid-2,.grid-3,.grid-4,.grid-5{grid-template-columns:1fr}
+      .layout-main{grid-template-columns:1fr!important}
     }
-    const { data: inserted } = await supabase
-      .from("profiles")
-      .insert({ id: userId, email: userEmail, role: "staff" })
-      .select("*")
-      .single();
-    if (inserted) setProfile(inserted as Profile);
-  };
-
-  const fetchAllData = async () => {
-    if (!session?.user) return;
-    setLoadingData(true);
-    setCloudStatus("online");
-    try {
-      await ensureProfile(session.user.id, session.user.email ?? null);
-      const [clientsRes, suppliersRes, vehiclesRes, operatorsRes, articlesRes, jobsRes, jobRowsRes, purchasesRes, purchaseRowsRes, profileRes] = await Promise.all([
-        supabase.from("clients").select("*").order("created_at", { ascending: false }),
-        supabase.from("suppliers").select("*").order("created_at", { ascending: false }),
-        supabase.from("vehicles").select("*").order("created_at", { ascending: false }),
-        supabase.from("operators").select("*").order("created_at", { ascending: false }),
-        supabase.from("articles").select("*").order("created_at", { ascending: false }),
-        supabase.from("jobs").select("*").order("created_at", { ascending: false }),
-        supabase.from("job_rows").select("*").order("created_at", { ascending: false }),
-        supabase.from("purchase_history").select("*").order("created_at", { ascending: false }),
-        supabase.from("purchase_history_rows").select("*").order("created_at", { ascending: false }),
-        supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle(),
-      ]);
-      if (profileRes.data) setProfile(profileRes.data as Profile);
-      setClients((clientsRes.data || []) as Client[]);
-      setSuppliers((suppliersRes.data || []) as Supplier[]);
-      setVehicles((vehiclesRes.data || []) as Vehicle[]);
-      setOperators((operatorsRes.data || []) as Operator[]);
-      setArticles((articlesRes.data || []) as Article[]);
-      setJobs((jobsRes.data || []) as Job[]);
-      setJobRows((jobRowsRes.data || []) as JobRow[]);
-      setPurchases((purchasesRes.data || []) as PurchaseHistory[]);
-      setPurchaseRowsHistory((purchaseRowsRes.data || []) as PurchaseHistoryRow[]);
-      setCloudStatus("online");
-      fallbackSave({
-        clients: (clientsRes.data || []) as Client[],
-        suppliers: (suppliersRes.data || []) as Supplier[],
-        vehicles: (vehiclesRes.data || []) as Vehicle[],
-        operators: (operatorsRes.data || []) as Operator[],
-        articles: (articlesRes.data || []) as Article[],
-        jobs: (jobsRes.data || []) as Job[],
-        jobRows: (jobRowsRes.data || []) as JobRow[],
-        purchases: (purchasesRes.data || []) as PurchaseHistory[],
-        purchaseRows: (purchaseRowsRes.data || []) as PurchaseHistoryRow[],
-      });
-    } catch {
-      fallbackLoad();
-    } finally {
-      setLoadingData(false);
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .row > *{min-width:0}
+    .space-between{justify-content:space-between}
+    .align-start{align-items:flex-start}
+    input,select,button,textarea{
+      width:100%;
+      min-height:42px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      padding:10px 12px;
+      font-size:14px;
+      background:#fff;
     }
-  };
-
-  const signIn = async () => {
-    setAuthError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setAuthError(error.message);
-  };
-
-  const signUp = async () => {
-    setAuthError("");
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) setAuthError(error.message);
-  };
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setProfile(null);
-  };
-
-  const saveClient = async () => {
-    if (!clientForm.name.trim() || isViewer) return;
-    await supabase.from("clients").insert({
-      name: clientForm.name.trim(),
-      type: clientForm.type,
-      phone: clientForm.phone || null,
-      vat_number: clientForm.vat_number || null,
-      address: clientForm.address || null,
-      sdi: clientForm.sdi || null,
-    });
-    setShowClientForm(false);
-    setClientForm(emptyClientForm);
-    fetchAllData();
-  };
-
-  const saveSupplier = async () => {
-    if (!supplierForm.name.trim() || isViewer) return;
-    await supabase.from("suppliers").insert({
-      name: supplierForm.name.trim(),
-      contact_name: supplierForm.contact_name || null,
-      phone: supplierForm.phone || null,
-      email: supplierForm.email || null,
-      vat_number: supplierForm.vat_number || null,
-    });
-    setShowSupplierForm(false);
-    setSupplierForm(emptySupplierForm);
-    fetchAllData();
-  };
-
-  const saveVehicle = async () => {
-    if (!vehicleForm.client_id || !vehicleForm.plate.trim() || isViewer) return;
-    await supabase.from("vehicles").insert({
-      client_id: vehicleForm.client_id,
-      plate: vehicleForm.plate.trim().toUpperCase(),
-      brand: vehicleForm.brand || null,
-      model: vehicleForm.model || null,
-      vehicle_type: vehicleForm.vehicle_type || null,
-      vin: vehicleForm.vin || null,
-    });
-    setShowVehicleForm(false);
-    setVehicleForm(emptyVehicleForm);
-    fetchAllData();
-  };
-
-  const saveOperator = async () => {
-    if (!operatorForm.name.trim() || isViewer) return;
-    await supabase.from("operators").insert({
-      name: operatorForm.name.trim(),
-      role_name: operatorForm.role_name || null,
-      hourly_cost: Number(operatorForm.hourly_cost || 0),
-    });
-    setShowOperatorForm(false);
-    setOperatorForm(emptyOperatorForm);
-    fetchAllData();
-  };
-
-  const saveArticle = async () => {
-    if (!articleForm.code.trim() || !articleForm.description.trim() || isViewer) return;
-    const existing = articles.find((item) => normalizeText(item.code) === normalizeText(articleForm.code));
-    const payload = {
-      category: articleForm.category || "Generico",
-      code: articleForm.code.trim().toUpperCase(),
-      description: articleForm.description.trim(),
-      brand: articleForm.brand || null,
-      unit: articleForm.unit || "pz",
-      stock: Number(articleForm.stock || 0),
-      min_stock: Number(articleForm.min_stock || 0),
-      sale_price_net: Number(articleForm.sale_price_net || 0),
-      purchase_price_net: Number(articleForm.purchase_price_net || 0),
-      last_supplier_id: articleForm.last_supplier_id || null,
-      last_purchase_date: articleForm.last_purchase_date || null,
-    };
-    if (existing) {
-      await supabase.from("articles").update(payload).eq("id", existing.id);
-    } else {
-      await supabase.from("articles").insert(payload);
+    textarea{min-height:90px;resize:vertical}
+    button{
+      cursor:pointer;
+      border:0;
+      background:var(--primary);
+      color:var(--primary-text);
+      font-weight:600;
     }
-    setShowArticleForm(false);
-    setArticleForm(emptyArticleForm);
-    fetchAllData();
-  };
-
-  const addArticleRowToJob = (article: Article) => {
-    setJobEditorRows((prev) => [...prev, {
-      id: makeLocalId(),
-      row_type: "articolo_magazzino",
-      article_id: article.id,
-      operator_id: null,
-      operator_name: "",
-      description: article.description,
-      quantity: 1,
-      purchase_price_net: Number(article.purchase_price_net || 0),
-      sale_price_net: Number(article.sale_price_net || 0),
-      supplier_id: article.last_supplier_id,
-      last_purchase_date: article.last_purchase_date,
-    }]);
-    setJobArticleSearch("");
-  };
-
-  const addLaborRow = () => {
-    setJobEditorRows((prev) => [...prev, {
-      id: makeLocalId(),
-      row_type: "manodopera",
-      article_id: null,
-      operator_id: selectedOperator?.id || null,
-      operator_name: selectedOperator?.name || "",
-      description: "Manodopera",
-      quantity: 1,
-      purchase_price_net: Number(selectedOperator?.hourly_cost || 0),
-      sale_price_net: 35,
-      supplier_id: null,
-      last_purchase_date: null,
-    }]);
-  };
-
-  const updateJobEditorRow = (rowId: string, field: keyof JobEditorRow, value: string | number | null) => {
-    setJobEditorRows((prev) => prev.map((row) => row.id === rowId ? { ...row, [field]: value } : row));
-  };
-
-  const removeJobEditorRow = (rowId: string) => {
-    setJobEditorRows((prev) => prev.filter((row) => row.id !== rowId));
-  };
-
-  const saveJob = async () => {
-    if (isViewer || !selectedClientId || jobEditorRows.length === 0) return;
-    const number = getNextJobNumber(jobs);
-    const { data: jobInserted } = await supabase.from("jobs").insert({
-      number,
-      date: new Date().toISOString().slice(0, 10),
-      type: jobType,
-      status: "chiusa",
-      client_id: selectedClientId,
-      vehicle_id: jobType === "riparazione" ? selectedVehicleId || null : null,
-      imponibile: jobTotals.imponibile,
-      vat: jobTotals.vat,
-      total_gross: jobTotals.total,
-      margin: jobTotals.margin,
-      closed_at: new Date().toISOString(),
-    }).select("*").single();
-    if (!jobInserted) return;
-    await supabase.from("job_rows").insert(jobEditorRows.map((row) => ({
-      job_id: jobInserted.id,
-      row_type: row.row_type,
-      article_id: row.article_id,
-      operator_id: row.operator_id,
-      operator_name: row.operator_name || null,
-      description: row.description,
-      quantity: row.quantity,
-      purchase_price_net: row.purchase_price_net,
-      sale_price_net: row.sale_price_net,
-      supplier_id: row.supplier_id,
-      last_purchase_date: row.last_purchase_date,
-    })));
-    setSelectedClientId("");
-    setSelectedVehicleId("");
-    setSelectedOperatorId("");
-    setJobArticleSearch("");
-    setJobEditorRows([]);
-    fetchAllData();
-  };
-
-  const addPurchaseEditorRow = () => {
-    setPurchaseRowsEditor((prev) => [...prev, { id: makeLocalId(), article_id: "", article_search: "", quantity: "", purchase_price_net: "", sale_price_net: "" }]);
-  };
-
-  const updatePurchaseEditorRow = (rowId: string, field: keyof PurchaseEditorRow, value: string) => {
-    setPurchaseRowsEditor((prev) => prev.map((row) => row.id === rowId ? { ...row, [field]: value } : row));
-  };
-
-  const removePurchaseEditorRow = (rowId: string) => {
-    setPurchaseRowsEditor((prev) => prev.filter((row) => row.id !== rowId));
-  };
-
-  const savePurchase = async () => {
-    if (isViewer || !purchaseHeader.supplier_id) return;
-    const validRows = purchaseRowsEditor.filter((row) => row.article_id && Number(row.quantity || 0) > 0);
-    if (validRows.length === 0) return;
-    const totalNet = validRows.reduce((acc, row) => acc + Number(row.quantity || 0) * Number(row.purchase_price_net || 0), 0);
-    const { data: purchaseInserted } = await supabase.from("purchase_history").insert({
-      date: purchaseHeader.data,
-      supplier_id: purchaseHeader.supplier_id,
-      document_number: purchaseHeader.document_number || null,
-      total_net: totalNet,
-    }).select("*").single();
-    if (!purchaseInserted) return;
-
-    await supabase.from("purchase_history_rows").insert(validRows.map((row) => {
-      const article = articles.find((item) => item.id === row.article_id);
-      return {
-        purchase_history_id: purchaseInserted.id,
-        article_id: row.article_id,
-        code: article?.code || row.article_search,
-        description: article?.description || row.article_search,
-        quantity: Number(row.quantity || 0),
-        purchase_price_net: Number(row.purchase_price_net || 0),
-        sale_price_net: Number(row.sale_price_net || 0),
-        total_net: Number(row.quantity || 0) * Number(row.purchase_price_net || 0),
-      };
-    }));
-
-    for (const row of validRows) {
-      const article = articles.find((item) => item.id === row.article_id);
-      if (!article) continue;
-      await supabase.from("articles").update({
-        stock: Number(article.stock || 0) + Number(row.quantity || 0),
-        purchase_price_net: Number(row.purchase_price_net || article.purchase_price_net || 0),
-        sale_price_net: Number(row.sale_price_net || article.sale_price_net || 0),
-        last_supplier_id: purchaseHeader.supplier_id,
-        last_purchase_date: purchaseHeader.data,
-      }).eq("id", article.id);
+    button.secondary{
+      background:#fff;
+      color:var(--text);
+      border:1px solid var(--border);
     }
-
-    setPurchaseHeader({ supplier_id: "", data: new Date().toISOString().slice(0, 10), document_number: "" });
-    setPurchaseRowsEditor([]);
-    fetchAllData();
-  };
-
-  const exportSnapshot = () => {
-    const blob = new Blob([
-      JSON.stringify({ clients, suppliers, vehicles, operators, articles, jobs, jobRows, purchases, purchaseRowsHistory }, null, 2),
-    ], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `caragri-cloud-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  if (loadingAuth) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500">Connessione a Supabase...</div>;
-  }
-
-  if (!session) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center">
-        <Card className="w-full max-w-md rounded-3xl shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" />Car-Agri Cloud</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Button variant={authMode === "login" ? "default" : "outline"} className="rounded-2xl flex-1" onClick={() => setAuthMode("login")}>Accedi</Button>
-              <Button variant={authMode === "register" ? "default" : "outline"} className="rounded-2xl flex-1" onClick={() => setAuthMode("register")}>Registrati</Button>
-            </div>
-            <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="rounded-2xl" />
-            <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-2xl" />
-            {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={authMode === "login" ? signIn : signUp}>{authMode === "login" ? "Entra nel gestionale" : "Crea account"}</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Car-Agri Cloud Gestionale</h1>
-            <p className="text-sm text-slate-600">Multiutente, multi-PC, archivio online condiviso.</p>
+    button.ghost{
+      background:transparent;
+      color:var(--text);
+      border:1px dashed var(--border);
+    }
+    button.danger{background:var(--danger)}
+    button.success{background:var(--success)}
+    button.small-btn{min-height:34px;padding:6px 10px;font-size:12px;border-radius:10px}
+    .hidden{display:none!important}
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      background:var(--soft);
+      font-size:12px;
+      color:var(--primary);
+      border:1px solid #dbe4ff;
+    }
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+      flex-wrap:wrap;
+      margin-bottom:16px;
+    }
+    .tabs{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:16px;
+    }
+    .tab{
+      width:auto;
+      min-height:40px;
+      border-radius:999px;
+      padding:9px 14px;
+      background:#fff;
+      color:var(--text);
+      border:1px solid var(--border);
+      font-size:13px;
+    }
+    .tab.active{
+      background:var(--primary);
+      color:#fff;
+    }
+    .section{display:none}
+    .section.active{display:block}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{
+      border-bottom:1px solid var(--border);
+      text-align:left;
+      padding:10px 8px;
+      vertical-align:top;
+    }
+    th{color:var(--muted);font-weight:700;font-size:12px;text-transform:uppercase}
+    .table-wrap{overflow:auto}
+    .metric{
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px;
+      background:#fff;
+    }
+    .metric .value{font-size:24px;font-weight:700;margin-top:8px}
+    .right{text-align:right}
+    .badge{
+      display:inline-block;
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:4px 8px;
+      font-size:12px;
+      background:#fff;
+    }
+    .layout-main{
+      display:grid;
+      gap:16px;
+      grid-template-columns:2fr 1fr;
+    }
+    .login-wrap{
+      max-width:430px;
+      margin:40px auto;
+    }
+    .inline-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .empty{
+      padding:24px;
+      border-radius:16px;
+      border:1px dashed var(--border);
+      color:var(--muted);
+      background:#fff;
+      text-align:center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="authView" class="login-wrap">
+      <div class="card">
+        <h1>Car-Agri Cloud</h1>
+        <p class="muted" style="margin-top:8px;margin-bottom:16px;">Gestionale officina online collegato a Supabase.</p>
+        <div class="grid">
+          <input id="loginEmail" type="email" placeholder="Email" />
+          <input id="loginPassword" type="password" placeholder="Password" />
+          <div class="row">
+            <button id="loginBtn">Accedi</button>
+            <button id="registerBtn" class="secondary">Registrazione</button>
           </div>
-          <div className="flex gap-2 flex-wrap items-center">
-            <div className="hidden md:flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-sm text-slate-600">
-              <Wifi className="h-4 w-4" />
-              <span>{cloudStatus === "online" ? "Connesso a Supabase" : "Modalità offline locale"}</span>
-            </div>
-            <div className="hidden md:flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 text-sm text-slate-600">
-              <Shield className="h-4 w-4" />
-              <span>{profile?.role || "staff"}</span>
-            </div>
-            <Button variant="outline" className="rounded-2xl" onClick={exportSnapshot}><Download className="mr-2 h-4 w-4" />Esporta archivio</Button>
-            <Button variant="outline" className="rounded-2xl" onClick={fetchAllData}>Aggiorna</Button>
-            <Button variant="outline" className="rounded-2xl" onClick={signOut}><LogOut className="mr-2 h-4 w-4" />Esci</Button>
+          <div id="authStatus" class="status"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="appView" class="hidden">
+      <div class="topbar">
+        <div>
+          <h1>Car-Agri Gestionale</h1>
+          <p class="muted" style="margin-top:6px;">Versione cloud condivisa tra magazzino, ufficio e altri utenti.</p>
+          <div class="row" style="margin-top:10px;">
+            <span class="pill" id="userEmailBadge"></span>
+            <span class="pill" id="cloudBadge">Online</span>
+            <span class="pill" id="roleBadge">staff</span>
+          </div>
+        </div>
+        <div class="inline-actions">
+          <button id="refreshAllBtn" class="secondary">Aggiorna</button>
+          <button id="exportBtn" class="secondary">Esporta archivio</button>
+          <button id="logoutBtn" class="danger">Esci</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="jobNew">Nuova commessa</button>
+        <button class="tab" data-tab="jobHistory">Storico commesse</button>
+        <button class="tab" data-tab="clients">Clienti</button>
+        <button class="tab" data-tab="vehicles">Veicoli</button>
+        <button class="tab" data-tab="suppliers">Fornitori</button>
+        <button class="tab" data-tab="operators">Operatori</button>
+        <button class="tab" data-tab="articles">Magazzino</button>
+        <button class="tab" data-tab="purchases">Carico merce</button>
+        <button class="tab" data-tab="purchaseHistory">Storico carichi</button>
+      </div>
+
+      <div id="dashboard" class="section active">
+        <div class="grid grid-4">
+          <div class="metric">
+            <div class="muted small">Clienti</div>
+            <div class="value" id="metricClients">0</div>
+          </div>
+          <div class="metric">
+            <div class="muted small">Fornitori</div>
+            <div class="value" id="metricSuppliers">0</div>
+          </div>
+          <div class="metric">
+            <div class="muted small">Articoli</div>
+            <div class="value" id="metricArticles">0</div>
+          </div>
+          <div class="metric">
+            <div class="muted small">Valore magazzino</div>
+            <div class="value" id="metricInventory">€ 0,00</div>
           </div>
         </div>
 
-        <Tabs defaultValue="home" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl md:grid-cols-10">
-            <TabsTrigger value="home">Home</TabsTrigger>
-            <TabsTrigger value="commessa">Nuova commessa</TabsTrigger>
-            <TabsTrigger value="storico">Storico commesse</TabsTrigger>
-            <TabsTrigger value="clienti">Clienti</TabsTrigger>
-            <TabsTrigger value="veicoli">Veicoli</TabsTrigger>
-            <TabsTrigger value="articoli">Magazzino</TabsTrigger>
-            <TabsTrigger value="fornitori">Fornitori</TabsTrigger>
-            <TabsTrigger value="operatori">Operatori</TabsTrigger>
-            <TabsTrigger value="carico">Carico merce</TabsTrigger>
-            <TabsTrigger value="movimenti">Valore</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="home" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="rounded-3xl shadow-sm md:col-span-2">
-                <CardHeader><CardTitle className="flex items-center gap-2"><Search className="h-5 w-5" />Ricerca rapida</CardTitle></CardHeader>
-                <CardContent><Input placeholder="Cerca per codice, descrizione, cliente o fornitore" className="rounded-2xl" /></CardContent>
-              </Card>
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader><CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5" />Valore magazzino</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-semibold">{euro(inventoryValue)}</div></CardContent>
-              </Card>
+        <div class="grid grid-2" style="margin-top:16px;">
+          <div class="card">
+            <h2>Ultimi carichi merce</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Fornitore</th>
+                    <th>Documento</th>
+                    <th class="right">Totale</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboardPurchases"></tbody>
+              </table>
             </div>
-          </TabsContent>
-
-          <TabsContent value="clienti">
-            <Card className="rounded-3xl shadow-sm">
-              <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Clienti</CardTitle></CardHeader>
-              <CardContent>
-                {!isViewer && <Button className="rounded-2xl mb-4" onClick={() => setShowClientForm(true)}>Nuovo cliente</Button>}
-                {loadingData ? <div className="text-sm text-slate-500">Caricamento...</div> : clients.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessun cliente.</div> : <Table><TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>Telefono</TableHead><TableHead>P.IVA</TableHead></TableRow></TableHeader><TableBody>{clients.map((item) => <TableRow key={item.id}><TableCell>{item.name}</TableCell><TableCell>{item.phone || "-"}</TableCell><TableCell>{item.vat_number || "-"}</TableCell></TableRow>)}</TableBody></Table>}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="fornitori">
-            <Card className="rounded-3xl shadow-sm">
-              <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Fornitori</CardTitle></CardHeader>
-              <CardContent>
-                {!isViewer && <Button className="rounded-2xl mb-4" onClick={() => setShowSupplierForm(true)}>Nuovo fornitore</Button>}
-                {suppliers.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessun fornitore.</div> : <Table><TableHeader><TableRow><TableHead>Fornitore</TableHead><TableHead>Contatto</TableHead><TableHead>P.IVA</TableHead></TableRow></TableHeader><TableBody>{suppliers.map((item) => <TableRow key={item.id}><TableCell>{item.name}</TableCell><TableCell>{item.contact_name || "-"}</TableCell><TableCell>{item.vat_number || "-"}</TableCell></TableRow>)}</TableBody></Table>}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="veicoli">
-            <Card className="rounded-3xl shadow-sm">
-              <CardHeader><CardTitle className="flex items-center gap-2"><Car className="h-5 w-5" />Veicoli</CardTitle></CardHeader>
-              <CardContent>
-                {!isViewer && <Button className="rounded-2xl mb-4" onClick={() => setShowVehicleForm(true)}>Nuovo veicolo</Button>}
-                {vehicles.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessun veicolo.</div> : <Table><TableHeader><TableRow><TableHead>Targa</TableHead><TableHead>Cliente</TableHead><TableHead>Marca</TableHead><TableHead>Modello</TableHead></TableRow></TableHeader><TableBody>{vehicles.map((item) => <TableRow key={item.id}><TableCell>{item.plate}</TableCell><TableCell>{clients.find((client) => client.id === item.client_id)?.name || "-"}</TableCell><TableCell>{item.brand || "-"}</TableCell><TableCell>{item.model || "-"}</TableCell></TableRow>)}</TableBody></Table>}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="operatori">
-            <Card className="rounded-3xl shadow-sm">
-              <CardHeader><CardTitle className="flex items-center gap-2"><UserRound className="h-5 w-5" />Operatori</CardTitle></CardHeader>
-              <CardContent>
-                {!isViewer && <Button className="rounded-2xl mb-4" onClick={() => setShowOperatorForm(true)}>Nuovo operatore</Button>}
-                {operators.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessun operatore.</div> : <Table><TableHeader><TableRow><TableHead>Operatore</TableHead><TableHead>Ruolo</TableHead><TableHead>Costo orario</TableHead></TableRow></TableHeader><TableBody>{operators.map((item) => <TableRow key={item.id}><TableCell>{item.name}</TableCell><TableCell>{item.role_name || "-"}</TableCell><TableCell>{euro(item.hourly_cost)}</TableCell></TableRow>)}</TableBody></Table>}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="articoli">
-            <Card className="rounded-3xl shadow-sm">
-              <CardHeader><CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" />Magazzino</CardTitle></CardHeader>
-              <CardContent>
-                {!isViewer && <Button className="rounded-2xl mb-4" onClick={() => setShowArticleForm(true)}>Nuovo articolo</Button>}
-                {articles.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessun articolo.</div> : <Table><TableHeader><TableRow><TableHead>Codice</TableHead><TableHead>Descrizione</TableHead><TableHead>Marca</TableHead><TableHead>Giacenza</TableHead><TableHead>Vendita</TableHead></TableRow></TableHeader><TableBody>{articles.map((item) => <TableRow key={item.id}><TableCell>{item.code}</TableCell><TableCell>{item.description}</TableCell><TableCell>{item.brand || "-"}</TableCell><TableCell>{item.stock}</TableCell><TableCell>{euro(item.sale_price_net)}</TableCell></TableRow>)}</TableBody></Table>}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="commessa" className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-3">
-              <Card className="rounded-3xl shadow-sm lg:col-span-2">
-                <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" />Nuova commessa condivisa</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">Tipo commessa</label>
-                      <Select value={jobType} onValueChange={(v: "riparazione" | "banco") => setJobType(v)}>
-                        <SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="riparazione">Riparazione</SelectItem><SelectItem value="banco">Vendita al banco</SelectItem></SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">Cliente</label>
-                      <Select value={selectedClientId} onValueChange={setSelectedClientId}><SelectTrigger className="rounded-2xl"><SelectValue placeholder="Seleziona cliente" /></SelectTrigger><SelectContent>{clients.length === 0 ? <SelectItem value="__empty-client" disabled>Nessun cliente</SelectItem> : clients.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">Veicolo</label>
-                      <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId} disabled={jobType !== "riparazione"}><SelectTrigger className="rounded-2xl"><SelectValue placeholder="Seleziona veicolo" /></SelectTrigger><SelectContent>{clientVehicles.length === 0 ? <SelectItem value="__empty-vehicle" disabled>Nessun veicolo</SelectItem> : clientVehicles.map((item) => <SelectItem key={item.id} value={item.id}>{item.plate} · {item.model || ""}</SelectItem>)}</SelectContent></Select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">Operatore</label>
-                      <Select value={selectedOperatorId} onValueChange={setSelectedOperatorId}><SelectTrigger className="rounded-2xl"><SelectValue placeholder="Seleziona operatore" /></SelectTrigger><SelectContent>{operators.length === 0 ? <SelectItem value="__empty-operator" disabled>Nessun operatore</SelectItem> : operators.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium">Cerca articolo per codice o descrizione</label>
-                    <Input value={jobArticleSearch} onChange={(e) => setJobArticleSearch(e.target.value)} placeholder="Scrivi codice o descrizione" className="rounded-2xl" />
-                    {jobArticleSearch && <div className="rounded-2xl border bg-white p-2 space-y-2">{articleMatchesInJob.length > 0 ? articleMatchesInJob.map((article) => <button key={article.id} type="button" className="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left hover:bg-slate-50" onClick={() => addArticleRowToJob(article)}><span className="font-medium">{article.code}</span><span className="text-xs text-slate-500">{article.description}</span></button>) : <div className="rounded-xl border border-dashed px-3 py-3 text-sm text-slate-600">Articolo non trovato</div>}</div>}
-                  </div>
-                  {!isViewer && <div className="flex gap-2"><Button variant="outline" className="rounded-2xl" onClick={addLaborRow}>Aggiungi manodopera</Button></div>}
-                  <div className="overflow-x-auto rounded-2xl border"><Table><TableHeader><TableRow><TableHead>Tipo</TableHead><TableHead>Descrizione</TableHead><TableHead>Operatore</TableHead><TableHead>Q.tà</TableHead><TableHead>Acquisto</TableHead><TableHead>Vendita</TableHead><TableHead>Azioni</TableHead></TableRow></TableHeader><TableBody>{jobEditorRows.map((row) => <TableRow key={row.id}><TableCell><Badge variant="outline">{row.row_type}</Badge></TableCell><TableCell><Input value={row.description} onChange={(e) => updateJobEditorRow(row.id, "description", e.target.value)} className="rounded-xl min-w-[220px]" /></TableCell><TableCell>{row.operator_name || "-"}</TableCell><TableCell><Input type="number" value={row.quantity} onChange={(e) => updateJobEditorRow(row.id, "quantity", Number(e.target.value))} className="rounded-xl w-20" /></TableCell><TableCell><Input type="number" value={row.purchase_price_net} onChange={(e) => updateJobEditorRow(row.id, "purchase_price_net", Number(e.target.value))} className="rounded-xl w-28" /></TableCell><TableCell><Input type="number" value={row.sale_price_net} onChange={(e) => updateJobEditorRow(row.id, "sale_price_net", Number(e.target.value))} className="rounded-xl w-28" /></TableCell><TableCell><Button variant="ghost" size="sm" className="rounded-xl" onClick={() => removeJobEditorRow(row.id)}><X className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table></div>
-                </CardContent>
-              </Card>
-              <Card className="rounded-3xl shadow-sm"><CardHeader><CardTitle>Riepilogo</CardTitle></CardHeader><CardContent className="space-y-3"><div className="rounded-2xl border p-4 space-y-2"><div className="flex justify-between"><span>Imponibile</span><span>{euro(jobTotals.imponibile)}</span></div><div className="flex justify-between"><span>IVA {IVA_DEFAULT}%</span><span>{euro(jobTotals.vat)}</span></div><div className="flex justify-between font-semibold border-t pt-2"><span>Totale</span><span>{euro(jobTotals.total)}</span></div></div>{!isViewer && <Button className="w-full rounded-2xl" onClick={saveJob}>Salva commessa online</Button>}</CardContent></Card>
+          </div>
+          <div class="card">
+            <h2>Ultime commesse</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Numero</th>
+                    <th>Cliente</th>
+                    <th>Tipo</th>
+                    <th class="right">Totale</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboardJobs"></tbody>
+              </table>
             </div>
-          </TabsContent>
-
-          <TabsContent value="storico"><Card className="rounded-3xl shadow-sm"><CardHeader><CardTitle className="flex items-center gap-2"><History className="h-5 w-5" />Storico commesse</CardTitle></CardHeader><CardContent>{jobs.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessuna commessa salvata.</div> : <Table><TableHeader><TableRow><TableHead>Numero</TableHead><TableHead>Data</TableHead><TableHead>Cliente</TableHead><TableHead>Tipo</TableHead><TableHead>Totale</TableHead></TableRow></TableHeader><TableBody>{jobs.map((job) => <TableRow key={job.id}><TableCell>{job.number}</TableCell><TableCell>{job.closed_at ? job.closed_at.slice(0, 10) : job.date}</TableCell><TableCell>{clients.find((item) => item.id === job.client_id)?.name || "-"}</TableCell><TableCell>{job.type}</TableCell><TableCell>{euro(job.total_gross)}</TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card></TabsContent>
-
-          <TabsContent value="carico"><Card className="rounded-3xl shadow-sm"><CardHeader><CardTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5" />Carico merce online</CardTitle><p className="text-sm text-slate-500 mt-2">Carico condiviso tra magazzino, ufficio e altri utenti autorizzati.</p></CardHeader><CardContent className="space-y-4"><div className="grid gap-3 md:grid-cols-3"><div className="space-y-2"><label className="block text-sm font-medium">Fornitore</label><Select value={purchaseHeader.supplier_id} onValueChange={(value) => setPurchaseHeader((prev) => ({ ...prev, supplier_id: value }))}><SelectTrigger className="rounded-2xl"><SelectValue placeholder="Seleziona fornitore" /></SelectTrigger><SelectContent>{suppliers.length === 0 ? <SelectItem value="__empty-supplier" disabled>Nessun fornitore</SelectItem> : suppliers.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><label className="block text-sm font-medium">Data</label><Input type="date" value={purchaseHeader.data} onChange={(e) => setPurchaseHeader((prev) => ({ ...prev, data: e.target.value }))} className="rounded-2xl" /></div><div className="space-y-2"><label className="block text-sm font-medium">Documento</label><Input value={purchaseHeader.document_number} onChange={(e) => setPurchaseHeader((prev) => ({ ...prev, document_number: e.target.value }))} placeholder="Numero documento" className="rounded-2xl" /></div></div><div className="flex gap-2">{!isViewer && <Button variant="outline" className="rounded-2xl" onClick={addPurchaseEditorRow}>Aggiungi riga</Button>}{!isViewer && <Button className="rounded-2xl" onClick={savePurchase}>Conferma carico online</Button>}</div>{purchaseRowsEditor.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessuna riga di carico.</div> : purchaseRowsEditor.map((row) => { const query = normalizeText(row.article_search); const matches = query ? articles.filter((item) => normalizeText(item.code).includes(query) || normalizeText(item.description).includes(query)).slice(0, 6) : []; return <div key={row.id} className="rounded-2xl border p-4 space-y-3"><div className="grid gap-3 md:grid-cols-4"><div className="md:col-span-2 space-y-2"><label className="block text-sm font-medium">Articolo</label><Input value={row.article_search} onChange={(e) => updatePurchaseEditorRow(row.id, "article_search", e.target.value)} placeholder="Scrivi codice o descrizione" className="rounded-2xl" />{query && <div className="rounded-2xl border bg-white p-2 space-y-2">{matches.length > 0 ? matches.map((article) => <button key={article.id} type="button" className="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left hover:bg-slate-50" onClick={() => { updatePurchaseEditorRow(row.id, "article_id", article.id); updatePurchaseEditorRow(row.id, "article_search", `${article.code} - ${article.description}`); updatePurchaseEditorRow(row.id, "purchase_price_net", String(article.purchase_price_net)); updatePurchaseEditorRow(row.id, "sale_price_net", String(article.sale_price_net)); }}><span className="font-medium">{article.code}</span><span className="text-xs text-slate-500">{article.description}</span></button>) : <div className="rounded-xl border border-dashed px-3 py-3 text-sm text-slate-600">Articolo non trovato</div>}</div>}</div><div className="space-y-2"><label className="block text-sm font-medium">Quantità</label><Input type="number" value={labelOrEmpty(row.quantity)} onChange={(e) => updatePurchaseEditorRow(row.id, "quantity", e.target.value)} className="rounded-2xl" /></div><div className="space-y-2"><label className="block text-sm font-medium">Prezzo acquisto</label><Input type="number" value={labelOrEmpty(row.purchase_price_net)} onChange={(e) => updatePurchaseEditorRow(row.id, "purchase_price_net", e.target.value)} className="rounded-2xl" /></div><div className="space-y-2"><label className="block text-sm font-medium">Prezzo vendita</label><Input type="number" value={labelOrEmpty(row.sale_price_net)} onChange={(e) => updatePurchaseEditorRow(row.id, "sale_price_net", e.target.value)} className="rounded-2xl" /></div></div><div className="flex justify-end">{!isViewer && <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => removePurchaseEditorRow(row.id)}><X className="h-4 w-4" /></Button>}</div></div>; })}</CardContent></Card></TabsContent>
-
-          <TabsContent value="movimenti"><div className="space-y-4"><Card className="rounded-3xl shadow-sm"><CardHeader><CardTitle>Valore magazzino</CardTitle></CardHeader><CardContent><div className="rounded-2xl border p-4"><div className="flex justify-between"><span>Valore totale magazzino</span><span>{euro(inventoryValue)}</span></div></div></CardContent></Card><Card className="rounded-3xl shadow-sm"><CardHeader><CardTitle className="flex items-center gap-2"><History className="h-5 w-5" />Storico carichi merce</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid gap-3 md:grid-cols-3"><div className="space-y-2"><label className="block text-sm font-medium">Filtro mese</label><Input type="month" value={purchaseMonthFilter} onChange={(e) => setPurchaseMonthFilter(e.target.value)} className="rounded-2xl" /></div><div className="space-y-2"><label className="block text-sm font-medium">Filtro fornitore</label><Select value={purchaseSupplierFilter} onValueChange={setPurchaseSupplierFilter}><SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Tutti i fornitori</SelectItem>{suppliers.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div></div>{groupedPurchaseRows.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-sm text-slate-500">Nessun carico registrato.</div> : <div className="space-y-4">{groupedPurchaseRows.map(({ purchase, rows, supplierName }) => <div key={purchase.id} className="rounded-2xl border p-4 space-y-3"><div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><div className="font-semibold">{supplierName}</div><div className="text-sm text-slate-500">{purchase.date}{purchase.document_number ? ` · Documento ${purchase.document_number}` : ""}</div></div><div className="text-sm font-medium">Totale netto {euro(purchase.total_net)}</div></div><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Codice</TableHead><TableHead>Descrizione</TableHead><TableHead>Q.tà</TableHead><TableHead>Prezzo acquisto</TableHead><TableHead>Totale</TableHead></TableRow></TableHeader><TableBody>{rows.map((row) => <TableRow key={row.id}><TableCell>{row.code}</TableCell><TableCell>{row.description}</TableCell><TableCell>{row.quantity}</TableCell><TableCell>{euro(row.purchase_price_net)}</TableCell><TableCell>{euro(row.total_net)}</TableCell></TableRow>)}</TableBody></Table></div></div>)}</div>}</CardContent></Card></div></TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </div>
 
-      <Dialog open={showClientForm} onOpenChange={setShowClientForm}><DialogContent className="max-w-xl rounded-3xl"><DialogHeader><DialogTitle>Nuovo cliente</DialogTitle></DialogHeader><div className="grid gap-3 md:grid-cols-2"><Input placeholder="Nome cliente" value={clientForm.name} onChange={(e) => setClientForm((prev) => ({ ...prev, name: e.target.value }))} className="rounded-2xl" /><Input placeholder="Telefono" value={clientForm.phone} onChange={(e) => setClientForm((prev) => ({ ...prev, phone: e.target.value }))} className="rounded-2xl" /><Input placeholder="Partita IVA" value={clientForm.vat_number} onChange={(e) => setClientForm((prev) => ({ ...prev, vat_number: e.target.value }))} className="rounded-2xl" /><Input placeholder="Indirizzo" value={clientForm.address} onChange={(e) => setClientForm((prev) => ({ ...prev, address: e.target.value }))} className="rounded-2xl" /><Input placeholder="SDI" value={clientForm.sdi} onChange={(e) => setClientForm((prev) => ({ ...prev, sdi: e.target.value }))} className="rounded-2xl" /></div><DialogFooter><Button variant="outline" className="rounded-2xl" onClick={() => setShowClientForm(false)}>Chiudi</Button><Button className="rounded-2xl" onClick={saveClient}>Salva cliente</Button></DialogFooter></DialogContent></Dialog>
+      <div id="clients" class="section">
+        <div class="card">
+          <div class="row space-between">
+            <div>
+              <h2>Clienti</h2>
+              <p class="muted small">Gestione clienti azienda e privati.</p>
+            </div>
+          </div>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <input id="clientName" placeholder="Nome / Ragione sociale" />
+            <select id="clientType">
+              <option value="azienda">Azienda</option>
+              <option value="privato">Privato</option>
+            </select>
+            <input id="clientPhone" placeholder="Telefono" />
+            <input id="clientVat" placeholder="Partita IVA" />
+            <input id="clientAddress" placeholder="Indirizzo" />
+            <input id="clientSdi" placeholder="SDI" />
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveClientBtn">Salva cliente</button>
+          </div>
+          <div id="clientStatus" class="status"></div>
+        </div>
 
-      <Dialog open={showSupplierForm} onOpenChange={setShowSupplierForm}><DialogContent className="max-w-xl rounded-3xl"><DialogHeader><DialogTitle>Nuovo fornitore</DialogTitle></DialogHeader><div className="grid gap-3 md:grid-cols-2"><Input placeholder="Ragione sociale" value={supplierForm.name} onChange={(e) => setSupplierForm((prev) => ({ ...prev, name: e.target.value }))} className="rounded-2xl" /><Input placeholder="Contatto" value={supplierForm.contact_name} onChange={(e) => setSupplierForm((prev) => ({ ...prev, contact_name: e.target.value }))} className="rounded-2xl" /><Input placeholder="Telefono" value={supplierForm.phone} onChange={(e) => setSupplierForm((prev) => ({ ...prev, phone: e.target.value }))} className="rounded-2xl" /><Input placeholder="Email" value={supplierForm.email} onChange={(e) => setSupplierForm((prev) => ({ ...prev, email: e.target.value }))} className="rounded-2xl" /><Input placeholder="Partita IVA" value={supplierForm.vat_number} onChange={(e) => setSupplierForm((prev) => ({ ...prev, vat_number: e.target.value }))} className="rounded-2xl" /></div><DialogFooter><Button variant="outline" className="rounded-2xl" onClick={() => setShowSupplierForm(false)}>Chiudi</Button><Button className="rounded-2xl" onClick={saveSupplier}>Salva fornitore</Button></DialogFooter></DialogContent></Dialog>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Tipo</th>
+                  <th>Telefono</th>
+                  <th>P.IVA</th>
+                  <th>Indirizzo</th>
+                  <th>SDI</th>
+                </tr>
+              </thead>
+              <tbody id="clientsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
-      <Dialog open={showVehicleForm} onOpenChange={setShowVehicleForm}><DialogContent className="max-w-xl rounded-3xl"><DialogHeader><DialogTitle>Nuovo veicolo</DialogTitle></DialogHeader><div className="grid gap-3 md:grid-cols-2"><Select value={vehicleForm.client_id || "__empty-client-owner"} onValueChange={(value) => { if (value === "__empty-client-owner") return; setVehicleForm((prev) => ({ ...prev, client_id: value })); }}><SelectTrigger className="rounded-2xl"><SelectValue placeholder="Seleziona proprietario" /></SelectTrigger><SelectContent>{clients.length === 0 ? <SelectItem value="__empty-client-owner" disabled>Nessun cliente</SelectItem> : clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent></Select><Input placeholder="Targa" value={vehicleForm.plate} onChange={(e) => setVehicleForm((prev) => ({ ...prev, plate: e.target.value }))} className="rounded-2xl" /><div className="space-y-2"><label className="block text-sm font-medium">Marca</label><Input list="vehicle-brands" placeholder="Marca" value={vehicleForm.brand} onChange={(e) => setVehicleForm((prev) => ({ ...prev, brand: e.target.value }))} className="rounded-2xl" /><datalist id="vehicle-brands">{savedVehicleBrands.map((brand) => <option key={brand} value={brand} />)}</datalist></div><Input placeholder="Modello" value={vehicleForm.model} onChange={(e) => setVehicleForm((prev) => ({ ...prev, model: e.target.value }))} className="rounded-2xl" /><Input placeholder="Tipo mezzo" value={vehicleForm.vehicle_type} onChange={(e) => setVehicleForm((prev) => ({ ...prev, vehicle_type: e.target.value }))} className="rounded-2xl" /><Input placeholder="Telaio" value={vehicleForm.vin} onChange={(e) => setVehicleForm((prev) => ({ ...prev, vin: e.target.value }))} className="rounded-2xl" /></div><DialogFooter><Button variant="outline" className="rounded-2xl" onClick={() => setShowVehicleForm(false)}>Chiudi</Button><Button className="rounded-2xl" onClick={saveVehicle}>Salva veicolo</Button></DialogFooter></DialogContent></Dialog>
+      <div id="suppliers" class="section">
+        <div class="card">
+          <h2>Fornitori</h2>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <input id="supplierName" placeholder="Ragione sociale" />
+            <input id="supplierContact" placeholder="Referente" />
+            <input id="supplierPhone" placeholder="Telefono" />
+            <input id="supplierEmail" placeholder="Email" />
+            <input id="supplierVat" placeholder="Partita IVA" />
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveSupplierBtn">Salva fornitore</button>
+          </div>
+          <div id="supplierStatus" class="status"></div>
+        </div>
 
-      <Dialog open={showOperatorForm} onOpenChange={setShowOperatorForm}><DialogContent className="max-w-xl rounded-3xl"><DialogHeader><DialogTitle>Nuovo operatore</DialogTitle></DialogHeader><div className="grid gap-3 md:grid-cols-3"><Input placeholder="Nome operatore" value={operatorForm.name} onChange={(e) => setOperatorForm((prev) => ({ ...prev, name: e.target.value }))} className="rounded-2xl" /><Input placeholder="Ruolo" value={operatorForm.role_name} onChange={(e) => setOperatorForm((prev) => ({ ...prev, role_name: e.target.value }))} className="rounded-2xl" /><Input placeholder="Costo orario netto" value={operatorForm.hourly_cost} onChange={(e) => setOperatorForm((prev) => ({ ...prev, hourly_cost: e.target.value }))} className="rounded-2xl" /></div><DialogFooter><Button variant="outline" className="rounded-2xl" onClick={() => setShowOperatorForm(false)}>Chiudi</Button><Button className="rounded-2xl" onClick={saveOperator}>Salva operatore</Button></DialogFooter></DialogContent></Dialog>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Referente</th>
+                  <th>Telefono</th>
+                  <th>Email</th>
+                  <th>P.IVA</th>
+                </tr>
+              </thead>
+              <tbody id="suppliersTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
-      <Dialog open={showArticleForm} onOpenChange={setShowArticleForm}><DialogContent className="max-w-3xl rounded-3xl"><DialogHeader><DialogTitle>Nuovo articolo</DialogTitle></DialogHeader><div className="grid gap-3 md:grid-cols-2"><Input placeholder="Categoria" value={articleForm.category} onChange={(e) => setArticleForm((prev) => ({ ...prev, category: e.target.value }))} className="rounded-2xl" /><Input placeholder="Codice articolo" value={articleForm.code} onChange={(e) => setArticleForm((prev) => ({ ...prev, code: e.target.value }))} className="rounded-2xl" /><Input placeholder="Descrizione articolo" value={articleForm.description} onChange={(e) => setArticleForm((prev) => ({ ...prev, description: e.target.value }))} className="rounded-2xl" /><div className="space-y-2"><label className="block text-sm font-medium">Marca</label><Input list="article-brands" value={articleForm.brand} onChange={(e) => setArticleForm((prev) => ({ ...prev, brand: e.target.value }))} className="rounded-2xl" /><datalist id="article-brands">{savedArticleBrands.map((brand) => <option key={brand} value={brand} />)}</datalist></div><Input placeholder="Unità" value={articleForm.unit} onChange={(e) => setArticleForm((prev) => ({ ...prev, unit: e.target.value }))} className="rounded-2xl" /><Input type="number" placeholder="Giacenza" value={articleForm.stock} onChange={(e) => setArticleForm((prev) => ({ ...prev, stock: e.target.value }))} className="rounded-2xl" /><Input type="number" placeholder="Scorta minima" value={articleForm.min_stock} onChange={(e) => setArticleForm((prev) => ({ ...prev, min_stock: e.target.value }))} className="rounded-2xl" /><Input type="number" placeholder="Prezzo vendita" value={articleForm.sale_price_net} onChange={(e) => setArticleForm((prev) => ({ ...prev, sale_price_net: e.target.value }))} className="rounded-2xl" /><Input type="number" placeholder="Prezzo acquisto" value={articleForm.purchase_price_net} onChange={(e) => setArticleForm((prev) => ({ ...prev, purchase_price_net: e.target.value }))} className="rounded-2xl" /><Input type="date" value={articleForm.last_purchase_date} onChange={(e) => setArticleForm((prev) => ({ ...prev, last_purchase_date: e.target.value }))} className="rounded-2xl" /><Select value={articleForm.last_supplier_id || "__empty-form-supplier"} onValueChange={(value) => setArticleForm((prev) => ({ ...prev, last_supplier_id: value === "__empty-form-supplier" ? "" : value }))}><SelectTrigger className="rounded-2xl"><SelectValue placeholder="Seleziona fornitore" /></SelectTrigger><SelectContent><SelectItem value="__empty-form-supplier">Nessun fornitore</SelectItem>{suppliers.map((supplier) => <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>)}</SelectContent></Select></div><DialogFooter><Button variant="outline" className="rounded-2xl" onClick={() => setShowArticleForm(false)}>Chiudi</Button><Button className="rounded-2xl" onClick={saveArticle}>Salva articolo</Button></DialogFooter></DialogContent></Dialog>
+      <div id="vehicles" class="section">
+        <div class="card">
+          <h2>Veicoli</h2>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <select id="vehicleClient"></select>
+            <input id="vehiclePlate" placeholder="Targa" />
+            <input id="vehicleBrand" placeholder="Marca" list="vehicleBrandsList" />
+            <input id="vehicleModel" placeholder="Modello" />
+            <input id="vehicleType" placeholder="Tipo mezzo" />
+            <input id="vehicleVin" placeholder="Telaio" />
+          </div>
+          <datalist id="vehicleBrandsList"></datalist>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveVehicleBtn">Salva veicolo</button>
+          </div>
+          <div id="vehicleStatus" class="status"></div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Targa</th>
+                  <th>Cliente</th>
+                  <th>Marca</th>
+                  <th>Modello</th>
+                  <th>Tipo mezzo</th>
+                  <th>Telaio</th>
+                </tr>
+              </thead>
+              <tbody id="vehiclesTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="operators" class="section">
+        <div class="card">
+          <h2>Operatori</h2>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <input id="operatorName" placeholder="Nome operatore" />
+            <input id="operatorRole" placeholder="Ruolo" />
+            <input id="operatorHourlyCost" type="number" step="0.01" placeholder="Costo orario" />
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveOperatorBtn">Salva operatore</button>
+          </div>
+          <div id="operatorStatus" class="status"></div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Operatore</th>
+                  <th>Ruolo</th>
+                  <th>Costo orario</th>
+                </tr>
+              </thead>
+              <tbody id="operatorsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="articles" class="section">
+        <div class="card">
+          <h2>Magazzino</h2>
+          <div class="grid grid-4" style="margin-top:12px;">
+            <input id="articleCode" placeholder="Codice articolo" />
+            <input id="articleDescription" placeholder="Descrizione articolo" />
+            <input id="articleBrand" placeholder="Marca" list="articleBrandsList" />
+            <input id="articleCategory" placeholder="Categoria" />
+            <input id="articleUnit" placeholder="Unità" value="pz" />
+            <input id="articleStock" type="number" step="0.01" placeholder="Giacenza" />
+            <input id="articleMinStock" type="number" step="0.01" placeholder="Scorta minima" />
+            <input id="articleSalePrice" type="number" step="0.01" placeholder="Prezzo vendita netto" />
+            <input id="articlePurchasePrice" type="number" step="0.01" placeholder="Prezzo acquisto netto" />
+            <input id="articleLastDate" type="date" />
+            <select id="articleSupplier"></select>
+          </div>
+          <datalist id="articleBrandsList"></datalist>
+          <div class="row" style="margin-top:12px;">
+            <button id="saveArticleBtn">Salva articolo</button>
+          </div>
+          <div id="articleStatus" class="status"></div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Codice</th>
+                  <th>Descrizione</th>
+                  <th>Marca</th>
+                  <th>Giacenza</th>
+                  <th>Vendita</th>
+                  <th>Acquisto</th>
+                  <th>Ultimo fornitore</th>
+                </tr>
+              </thead>
+              <tbody id="articlesTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="purchases" class="section">
+        <div class="card">
+          <h2>Carico merce</h2>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <select id="purchaseSupplier"></select>
+            <input id="purchaseDate" type="date" />
+            <input id="purchaseDocument" placeholder="Numero documento" />
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button id="addPurchaseRowBtn" class="secondary">Aggiungi riga</button>
+          </div>
+
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Articolo</th>
+                  <th>Quantità</th>
+                  <th>Prezzo acquisto</th>
+                  <th>Prezzo vendita</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="purchaseRowsTable"></tbody>
+            </table>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button id="savePurchaseBtn">Conferma carico</button>
+          </div>
+          <div id="purchaseStatus" class="status"></div>
+        </div>
+      </div>
+
+      <div id="purchaseHistory" class="section">
+        <div class="card">
+          <div class="grid grid-2">
+            <div>
+              <h2>Storico carichi merce</h2>
+              <p class="muted small">Elenco dei carichi registrati.</p>
+            </div>
+            <div class="grid grid-2">
+              <input id="purchaseFilterMonth" type="month" />
+              <select id="purchaseFilterSupplier"></select>
+            </div>
+          </div>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Fornitore</th>
+                  <th>Documento</th>
+                  <th class="right">Totale netto</th>
+                </tr>
+              </thead>
+              <tbody id="purchaseHistoryTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="jobNew" class="section">
+        <div class="layout-main">
+          <div class="card">
+            <h2>Nuova commessa</h2>
+            <div class="grid grid-4" style="margin-top:12px;">
+              <select id="jobType">
+                <option value="riparazione">Riparazione</option>
+                <option value="banco">Vendita al banco</option>
+              </select>
+              <select id="jobClient"></select>
+              <select id="jobVehicle"></select>
+              <select id="jobOperator"></select>
+            </div>
+
+            <div class="grid grid-2" style="margin-top:12px;">
+              <input id="jobArticleSearch" placeholder="Cerca articolo per codice o descrizione" />
+              <button id="addLaborRowBtn" class="secondary">Aggiungi manodopera</button>
+            </div>
+
+            <div id="jobArticleMatches" style="margin-top:10px;"></div>
+
+            <div class="table-wrap" style="margin-top:12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Descrizione</th>
+                    <th>Operatore</th>
+                    <th>Q.tà</th>
+                    <th>Acquisto</th>
+                    <th>Vendita</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="jobRowsTable"></tbody>
+              </table>
+            </div>
+
+            <div id="jobStatus" class="status"></div>
+          </div>
+
+          <div class="card">
+            <h2>Riepilogo commessa</h2>
+            <div class="grid" style="margin-top:8px;">
+              <div class="row space-between"><span>Imponibile</span><strong id="jobSummaryImponibile">€ 0,00</strong></div>
+              <div class="row space-between"><span>IVA 22%</span><strong id="jobSummaryVat">€ 0,00</strong></div>
+              <div class="row space-between"><span>Totale</span><strong id="jobSummaryTotal">€ 0,00</strong></div>
+              <div class="row space-between"><span>Margine</span><strong id="jobSummaryMargin">€ 0,00</strong></div>
+            </div>
+            <div class="row" style="margin-top:14px;">
+              <button id="saveJobBtn">Salva commessa</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="jobHistory" class="section">
+        <div class="card">
+          <h2>Storico commesse</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Numero</th>
+                  <th>Data</th>
+                  <th>Cliente</th>
+                  <th>Tipo</th>
+                  <th class="right">Totale</th>
+                </tr>
+              </thead>
+              <tbody id="jobsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
-  );
-}
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://aomvnfxupelnhxnoobve.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_hnAKtehrOpSHDIXSCAwSOQ_eHZD4dXl";
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const IVA_DEFAULT = 22;
+
+    const state = {
+      session: null,
+      profile: null,
+      clients: [],
+      suppliers: [],
+      vehicles: [],
+      operators: [],
+      articles: [],
+      jobs: [],
+      jobRowsHistory: [],
+      purchases: [],
+      purchaseRowsHistory: [],
+      purchaseEditorRows: [],
+      jobEditorRows: []
+    };
+
+    function setStatus(id, text, type = "") {
+      const el = document.getElementById(id);
+      el.textContent = text || "";
+      el.className = "status" + (type ? " " + type : "");
+    }
+
+    function euro(value) {
+      return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value || 0));
+    }
+
+    function safe(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function normalizeText(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function makeLocalId() {
+      return (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random());
+    }
+
+    function toggleApp(logged) {
+      document.getElementById("authView").classList.toggle("hidden", logged);
+      document.getElementById("appView").classList.toggle("hidden", !logged);
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.tab === tabId);
+      });
+      document.querySelectorAll(".section").forEach(sec => {
+        sec.classList.toggle("active", sec.id === tabId);
+      });
+    }
+
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    });
+
+    async function ensureProfile(user) {
+      const { data: existing } = await supabaseClient.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (existing) {
+        state.profile = existing;
+        return;
+      }
+      const { data: inserted } = await supabaseClient
+        .from("profiles")
+        .insert({ id: user.id, email: user.email, role: "staff" })
+        .select("*")
+        .single();
+      state.profile = inserted || { id: user.id, email: user.email, role: "staff" };
+    }
+
+    async function boot() {
+      const { data } = await supabaseClient.auth.getSession();
+      state.session = data.session;
+      if (state.session) {
+        await afterLogin();
+      } else {
+        toggleApp(false);
+      }
+
+      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+        state.session = session;
+        if (session) {
+          await afterLogin();
+        } else {
+          toggleApp(false);
+        }
+      });
+    }
+
+    async function afterLogin() {
+      document.getElementById("userEmailBadge").textContent = state.session.user.email || "";
+      await ensureProfile(state.session.user);
+      document.getElementById("roleBadge").textContent = state.profile?.role || "staff";
+      toggleApp(true);
+      await refreshAll();
+    }
+
+    async function login() {
+      setStatus("authStatus", "Accesso in corso...");
+      const email = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        setStatus("authStatus", error.message, "error");
+        return;
+      }
+      setStatus("authStatus", "Login effettuato.", "ok");
+    }
+
+    async function registerUser() {
+      setStatus("authStatus", "Registrazione in corso...");
+      const email = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      const { error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) {
+        setStatus("authStatus", error.message, "error");
+        return;
+      }
+      setStatus("authStatus", "Account creato. Ora effettua il login.", "ok");
+    }
+
+    async function logout() {
+      await supabaseClient.auth.signOut();
+      state.profile = null;
+    }
+
+    async function refreshAll() {
+      document.getElementById("cloudBadge").textContent = "Sincronizzazione...";
+      await Promise.all([
+        loadClients(),
+        loadSuppliers(),
+        loadVehicles(),
+        loadOperators(),
+        loadArticles(),
+        loadJobs(),
+        loadJobRowsHistory(),
+        loadPurchases(),
+        loadPurchaseRowsHistory()
+      ]);
+      renderAll();
+      document.getElementById("cloudBadge").textContent = "Online";
+    }
+
+    function renderAll() {
+      renderMetrics();
+      renderDashboard();
+      renderClients();
+      renderSuppliers();
+      renderVehicles();
+      renderOperators();
+      renderArticles();
+      renderPurchaseSelectors();
+      renderPurchaseEditorRows();
+      renderPurchaseHistory();
+      renderJobSelectors();
+      renderJobMatches();
+      renderJobEditorRows();
+      renderJobSummary();
+      renderJobs();
+      renderBrandLists();
+    }
+
+    async function loadClients() {
+      const { data, error } = await supabaseClient.from("clients").select("*").order("created_at", { ascending: false });
+      if (error) setStatus("clientStatus", error.message, "error");
+      state.clients = data || [];
+    }
+
+    async function loadSuppliers() {
+      const { data, error } = await supabaseClient.from("suppliers").select("*").order("created_at", { ascending: false });
+      if (error) setStatus("supplierStatus", error.message, "error");
+      state.suppliers = data || [];
+    }
+
+    async function loadVehicles() {
+      const { data, error } = await supabaseClient.from("vehicles").select("*").order("created_at", { ascending: false });
+      if (error) setStatus("vehicleStatus", error.message, "error");
+      state.vehicles = data || [];
+    }
+
+    async function loadOperators() {
+      const { data, error } = await supabaseClient.from("operators").select("*").order("created_at", { ascending: false });
+      if (error) setStatus("operatorStatus", error.message, "error");
+      state.operators = data || [];
+    }
+
+    async function loadArticles() {
+      const { data, error } = await supabaseClient.from("articles").select("*").order("created_at", { ascending: false });
+      if (error) setStatus("articleStatus", error.message, "error");
+      state.articles = data || [];
+    }
+
+    async function loadJobs() {
+      const { data, error } = await supabaseClient.from("jobs").select("*").order("created_at", { ascending: false });
+      if (error) setStatus("jobStatus", error.message, "error");
+      state.jobs = data || [];
+    }
+
+    async function loadJobRowsHistory() {
+      const { data } = await supabaseClient.from("job_rows").select("*").order("created_at", { ascending: false });
+      state.jobRowsHistory = data || [];
+    }
+
+    async function loadPurchases() {
+      const { data, error } = await supabaseClient.from("purchase_history").select("*").order("created_at", { ascending: false });
+      if (error) setStatus("purchaseStatus", error.message, "error");
+      state.purchases = data || [];
+    }
+
+    async function loadPurchaseRowsHistory() {
+      const { data } = await supabaseClient.from("purchase_history_rows").select("*").order("created_at", { ascending: false });
+      state.purchaseRowsHistory = data || [];
+    }
+
+    function renderMetrics() {
+      document.getElementById("metricClients").textContent = state.clients.length;
+      document.getElementById("metricSuppliers").textContent = state.suppliers.length;
+      document.getElementById("metricArticles").textContent = state.articles.length;
+      const inventory = state.articles.reduce((acc, a) => acc + Number(a.stock || 0) * Number(a.purchase_price_net || 0), 0);
+      document.getElementById("metricInventory").textContent = euro(inventory);
+    }
+
+    function renderDashboard() {
+      const dashPurchases = document.getElementById("dashboardPurchases");
+      dashPurchases.innerHTML = state.purchases.slice(0, 5).map(p => {
+        const supplier = state.suppliers.find(s => s.id === p.supplier_id);
+        return `
+          <tr>
+            <td>${safe(p.date)}</td>
+            <td>${safe(supplier?.name || "-")}</td>
+            <td>${safe(p.document_number || "-")}</td>
+            <td class="right">${euro(p.total_net)}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="4" class="muted">Nessun carico.</td></tr>`;
+
+      const dashJobs = document.getElementById("dashboardJobs");
+      dashJobs.innerHTML = state.jobs.slice(0, 5).map(j => {
+        const client = state.clients.find(c => c.id === j.client_id);
+        return `
+          <tr>
+            <td>${safe(j.number)}</td>
+            <td>${safe(client?.name || "-")}</td>
+            <td>${safe(j.type)}</td>
+            <td class="right">${euro(j.total_gross)}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="4" class="muted">Nessuna commessa.</td></tr>`;
+    }
+
+    function renderClients() {
+      document.getElementById("clientsTable").innerHTML = state.clients.map(c => `
+        <tr>
+          <td>${safe(c.name)}</td>
+          <td>${safe(c.type || "-")}</td>
+          <td>${safe(c.phone || "-")}</td>
+          <td>${safe(c.vat_number || "-")}</td>
+          <td>${safe(c.address || "-")}</td>
+          <td>${safe(c.sdi || "-")}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" class="muted">Nessun cliente.</td></tr>`;
+    }
+
+    function renderSuppliers() {
+      document.getElementById("suppliersTable").innerHTML = state.suppliers.map(s => `
+        <tr>
+          <td>${safe(s.name)}</td>
+          <td>${safe(s.contact_name || "-")}</td>
+          <td>${safe(s.phone || "-")}</td>
+          <td>${safe(s.email || "-")}</td>
+          <td>${safe(s.vat_number || "-")}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="5" class="muted">Nessun fornitore.</td></tr>`;
+    }
+
+    function renderVehicles() {
+      document.getElementById("vehiclesTable").innerHTML = state.vehicles.map(v => {
+        const client = state.clients.find(c => c.id === v.client_id);
+        return `
+          <tr>
+            <td>${safe(v.plate)}</td>
+            <td>${safe(client?.name || "-")}</td>
+            <td>${safe(v.brand || "-")}</td>
+            <td>${safe(v.model || "-")}</td>
+            <td>${safe(v.vehicle_type || "-")}</td>
+            <td>${safe(v.vin || "-")}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="6" class="muted">Nessun veicolo.</td></tr>`;
+    }
+
+    function renderOperators() {
+      document.getElementById("operatorsTable").innerHTML = state.operators.map(o => `
+        <tr>
+          <td>${safe(o.name)}</td>
+          <td>${safe(o.role_name || "-")}</td>
+          <td>${euro(o.hourly_cost)}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="3" class="muted">Nessun operatore.</td></tr>`;
+    }
+
+    function renderArticles() {
+      document.getElementById("articlesTable").innerHTML = state.articles.map(a => {
+        const supplier = state.suppliers.find(s => s.id === a.last_supplier_id);
+        return `
+          <tr>
+            <td>${safe(a.code)}</td>
+            <td>${safe(a.description)}</td>
+            <td>${safe(a.brand || "-")}</td>
+            <td>${safe(a.stock)}</td>
+            <td>${euro(a.sale_price_net)}</td>
+            <td>${euro(a.purchase_price_net)}</td>
+            <td>${safe(supplier?.name || "-")}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="7" class="muted">Nessun articolo.</td></tr>`;
+    }
+
+    function renderPurchaseSelectors() {
+      const supplierOptions = [`<option value="">Seleziona fornitore</option>`]
+        .concat(state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`))
+        .join("");
+
+      document.getElementById("purchaseSupplier").innerHTML = supplierOptions;
+      document.getElementById("articleSupplier").innerHTML = `<option value="">Nessun fornitore</option>` + state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`).join("");
+      document.getElementById("purchaseFilterSupplier").innerHTML = `<option value="">Tutti i fornitori</option>` + state.suppliers.map(s => `<option value="${s.id}">${safe(s.name)}</option>`).join("");
+    }
+
+    function renderPurchaseEditorRows() {
+      document.getElementById("purchaseDate").value ||= new Date().toISOString().slice(0, 10);
+      const tbody = document.getElementById("purchaseRowsTable");
+      tbody.innerHTML = state.purchaseEditorRows.map(row => `
+        <tr>
+          <td>
+            <select onchange="updatePurchaseEditorRow('${row.id}','article_id',this.value)">
+              <option value="">Seleziona articolo</option>
+              ${state.articles.map(a => `<option value="${a.id}" ${a.id === row.article_id ? "selected" : ""}>${safe(a.code)} - ${safe(a.description)}</option>`).join("")}
+            </select>
+          </td>
+          <td><input type="number" step="0.01" value="${safe(row.quantity)}" onchange="updatePurchaseEditorRow('${row.id}','quantity',this.value)"></td>
+          <td><input type="number" step="0.01" value="${safe(row.purchase_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','purchase_price_net',this.value)"></td>
+          <td><input type="number" step="0.01" value="${safe(row.sale_price_net)}" onchange="updatePurchaseEditorRow('${row.id}','sale_price_net',this.value)"></td>
+          <td><button class="secondary small-btn" onclick="removePurchaseEditorRow('${row.id}')">Elimina</button></td>
+        </tr>
+      `).join("") || `<tr><td colspan="5" class="muted">Nessuna riga di carico.</td></tr>`;
+    }
+
+    function renderPurchaseHistory() {
+      const month = document.getElementById("purchaseFilterMonth").value;
+      const supplierId = document.getElementById("purchaseFilterSupplier").value;
+      const filtered = state.purchases.filter(p => {
+        const monthOk = month ? String(p.date).startsWith(month) : true;
+        const supplierOk = supplierId ? p.supplier_id === supplierId : true;
+        return monthOk && supplierOk;
+      });
+
+      document.getElementById("purchaseHistoryTable").innerHTML = filtered.map(p => {
+        const supplier = state.suppliers.find(s => s.id === p.supplier_id);
+        return `
+          <tr>
+            <td>${safe(p.date)}</td>
+            <td>${safe(supplier?.name || "-")}</td>
+            <td>${safe(p.document_number || "-")}</td>
+            <td class="right">${euro(p.total_net)}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="4" class="muted">Nessun carico registrato.</td></tr>`;
+    }
+
+    function renderJobSelectors() {
+      document.getElementById("jobClient").innerHTML = `<option value="">Seleziona cliente</option>` + state.clients.map(c => `<option value="${c.id}">${safe(c.name)}</option>`).join("");
+      document.getElementById("jobOperator").innerHTML = `<option value="">Seleziona operatore</option>` + state.operators.map(o => `<option value="${o.id}">${safe(o.name)}</option>`).join("");
+
+      const selectedClientId = document.getElementById("jobClient").value;
+      const vehicles = state.vehicles.filter(v => v.client_id === selectedClientId);
+      document.getElementById("jobVehicle").innerHTML = `<option value="">Seleziona veicolo</option>` + vehicles.map(v => `<option value="${v.id}">${safe(v.plate)} - ${safe(v.model || "")}</option>`).join("");
+
+      document.getElementById("vehicleClient").innerHTML = `<option value="">Seleziona cliente</option>` + state.clients.map(c => `<option value="${c.id}">${safe(c.name)}</option>`).join("");
+    }
+
+    function renderJobMatches() {
+      const query = normalizeText(document.getElementById("jobArticleSearch").value);
+      const box = document.getElementById("jobArticleMatches");
+      if (!query) {
+        box.innerHTML = "";
+        return;
+      }
+      const matches = state.articles.filter(a =>
+        normalizeText(a.code).includes(query) || normalizeText(a.description).includes(query)
+      ).slice(0, 8);
+
+      if (matches.length === 0) {
+        box.innerHTML = `<div class="empty">Nessun articolo trovato.</div>`;
+        return;
+      }
+
+      box.innerHTML = matches.map(a => `
+        <div class="card" style="padding:10px;margin-bottom:8px;">
+          <div class="row space-between">
+            <div>
+              <strong>${safe(a.code)}</strong>
+              <div class="small muted">${safe(a.description)}</div>
+            </div>
+            <div style="flex:0 0 auto;">
+              <button class="small-btn" onclick="addArticleToJob('${a.id}')">Aggiungi</button>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderJobEditorRows() {
+      const tbody = document.getElementById("jobRowsTable");
+      tbody.innerHTML = state.jobEditorRows.map(row => `
+        <tr>
+          <td><span class="badge">${safe(row.row_type)}</span></td>
+          <td><input value="${safe(row.description)}" onchange="updateJobEditorRow('${row.id}','description',this.value)"></td>
+          <td>${safe(row.operator_name || "-")}</td>
+          <td><input type="number" step="0.01" value="${safe(row.quantity)}" onchange="updateJobEditorRow('${row.id}','quantity',this.value)"></td>
+          <td><input type="number" step="0.01" value="${safe(row.purchase_price_net)}" onchange="updateJobEditorRow('${row.id}','purchase_price_net',this.value)"></td>
+          <td><input type="number" step="0.01" value="${safe(row.sale_price_net)}" onchange="updateJobEditorRow('${row.id}','sale_price_net',this.value)"></td>
+          <td><button class="secondary small-btn" onclick="removeJobEditorRow('${row.id}')">Elimina</button></td>
+        </tr>
+      `).join("") || `<tr><td colspan="7" class="muted">Nessuna riga in commessa.</td></tr>`;
+    }
+
+    function renderJobSummary() {
+      const imponibile = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * Number(row.sale_price_net || 0), 0);
+      const vat = imponibile * IVA_DEFAULT / 100;
+      const total = imponibile + vat;
+      const margin = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * (Number(row.sale_price_net || 0) - Number(row.purchase_price_net || 0)), 0);
+
+      document.getElementById("jobSummaryImponibile").textContent = euro(imponibile);
+      document.getElementById("jobSummaryVat").textContent = euro(vat);
+      document.getElementById("jobSummaryTotal").textContent = euro(total);
+      document.getElementById("jobSummaryMargin").textContent = euro(margin);
+    }
+
+    function renderJobs() {
+      document.getElementById("jobsTable").innerHTML = state.jobs.map(j => {
+        const client = state.clients.find(c => c.id === j.client_id);
+        return `
+          <tr>
+            <td>${safe(j.number)}</td>
+            <td>${safe(j.closed_at ? String(j.closed_at).slice(0,10) : j.date)}</td>
+            <td>${safe(client?.name || "-")}</td>
+            <td>${safe(j.type)}</td>
+            <td class="right">${euro(j.total_gross)}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="5" class="muted">Nessuna commessa salvata.</td></tr>`;
+    }
+
+    function renderBrandLists() {
+      const articleBrands = [...new Set(state.articles.map(a => a.brand).filter(Boolean))];
+      const vehicleBrands = [...new Set(state.vehicles.map(v => v.brand).filter(Boolean))];
+      document.getElementById("articleBrandsList").innerHTML = articleBrands.map(b => `<option value="${safe(b)}"></option>`).join("");
+      document.getElementById("vehicleBrandsList").innerHTML = vehicleBrands.map(b => `<option value="${safe(b)}"></option>`).join("");
+    }
+
+    async function saveClient() {
+      setStatus("clientStatus", "Salvataggio...");
+      const payload = {
+        name: document.getElementById("clientName").value.trim(),
+        type: document.getElementById("clientType").value,
+        phone: document.getElementById("clientPhone").value.trim() || null,
+        vat_number: document.getElementById("clientVat").value.trim() || null,
+        address: document.getElementById("clientAddress").value.trim() || null,
+        sdi: document.getElementById("clientSdi").value.trim() || null
+      };
+      if (!payload.name) {
+        setStatus("clientStatus", "Inserisci il nome cliente.", "error");
+        return;
+      }
+      const { error } = await supabaseClient.from("clients").insert(payload);
+      if (error) {
+        setStatus("clientStatus", error.message, "error");
+        return;
+      }
+      ["clientName","clientPhone","clientVat","clientAddress","clientSdi"].forEach(id => document.getElementById(id).value = "");
+      setStatus("clientStatus", "Cliente salvato.", "ok");
+      await loadClients();
+      renderAll();
+    }
+
+    async function saveSupplier() {
+      setStatus("supplierStatus", "Salvataggio...");
+      const payload = {
+        name: document.getElementById("supplierName").value.trim(),
+        contact_name: document.getElementById("supplierContact").value.trim() || null,
+        phone: document.getElementById("supplierPhone").value.trim() || null,
+        email: document.getElementById("supplierEmail").value.trim() || null,
+        vat_number: document.getElementById("supplierVat").value.trim() || null
+      };
+      if (!payload.name) {
+        setStatus("supplierStatus", "Inserisci il nome fornitore.", "error");
+        return;
+      }
+      const { error } = await supabaseClient.from("suppliers").insert(payload);
+      if (error) {
+        setStatus("supplierStatus", error.message, "error");
+        return;
+      }
+      ["supplierName","supplierContact","supplierPhone","supplierEmail","supplierVat"].forEach(id => document.getElementById(id).value = "");
+      setStatus("supplierStatus", "Fornitore salvato.", "ok");
+      await loadSuppliers();
+      renderAll();
+    }
+
+    async function saveVehicle() {
+      setStatus("vehicleStatus", "Salvataggio...");
+      const payload = {
+        client_id: document.getElementById("vehicleClient").value || null,
+        plate: document.getElementById("vehiclePlate").value.trim().toUpperCase(),
+        brand: document.getElementById("vehicleBrand").value.trim() || null,
+        model: document.getElementById("vehicleModel").value.trim() || null,
+        vehicle_type: document.getElementById("vehicleType").value.trim() || null,
+        vin: document.getElementById("vehicleVin").value.trim() || null
+      };
+      if (!payload.client_id || !payload.plate) {
+        setStatus("vehicleStatus", "Seleziona cliente e inserisci targa.", "error");
+        return;
+      }
+      const { error } = await supabaseClient.from("vehicles").insert(payload);
+      if (error) {
+        setStatus("vehicleStatus", error.message, "error");
+        return;
+      }
+      ["vehiclePlate","vehicleBrand","vehicleModel","vehicleType","vehicleVin"].forEach(id => document.getElementById(id).value = "");
+      document.getElementById("vehicleClient").value = "";
+      setStatus("vehicleStatus", "Veicolo salvato.", "ok");
+      await loadVehicles();
+      renderAll();
+    }
+
+    async function saveOperator() {
+      setStatus("operatorStatus", "Salvataggio...");
+      const payload = {
+        name: document.getElementById("operatorName").value.trim(),
+        role_name: document.getElementById("operatorRole").value.trim() || null,
+        hourly_cost: Number(document.getElementById("operatorHourlyCost").value || 0)
+      };
+      if (!payload.name) {
+        setStatus("operatorStatus", "Inserisci il nome operatore.", "error");
+        return;
+      }
+      const { error } = await supabaseClient.from("operators").insert(payload);
+      if (error) {
+        setStatus("operatorStatus", error.message, "error");
+        return;
+      }
+      ["operatorName","operatorRole","operatorHourlyCost"].forEach(id => document.getElementById(id).value = "");
+      setStatus("operatorStatus", "Operatore salvato.", "ok");
+      await loadOperators();
+      renderAll();
+    }
+
+    async function saveArticle() {
+      setStatus("articleStatus", "Salvataggio...");
+      const payload = {
+        category: document.getElementById("articleCategory").value.trim() || "Generico",
+        code: document.getElementById("articleCode").value.trim().toUpperCase(),
+        description: document.getElementById("articleDescription").value.trim(),
+        brand: document.getElementById("articleBrand").value.trim() || null,
+        unit: document.getElementById("articleUnit").value.trim() || "pz",
+        stock: Number(document.getElementById("articleStock").value || 0),
+        min_stock: Number(document.getElementById("articleMinStock").value || 0),
+        sale_price_net: Number(document.getElementById("articleSalePrice").value || 0),
+        purchase_price_net: Number(document.getElementById("articlePurchasePrice").value || 0),
+        last_purchase_date: document.getElementById("articleLastDate").value || null,
+        last_supplier_id: document.getElementById("articleSupplier").value || null
+      };
+      if (!payload.code || !payload.description) {
+        setStatus("articleStatus", "Inserisci codice e descrizione.", "error");
+        return;
+      }
+      const existing = state.articles.find(a => normalizeText(a.code) === normalizeText(payload.code));
+      let error;
+      if (existing) {
+        ({ error } = await supabaseClient.from("articles").update(payload).eq("id", existing.id));
+      } else {
+        ({ error } = await supabaseClient.from("articles").insert(payload));
+      }
+      if (error) {
+        setStatus("articleStatus", error.message, "error");
+        return;
+      }
+      ["articleCode","articleDescription","articleBrand","articleCategory","articleStock","articleMinStock","articleSalePrice","articlePurchasePrice","articleLastDate"].forEach(id => document.getElementById(id).value = "");
+      document.getElementById("articleUnit").value = "pz";
+      document.getElementById("articleSupplier").value = "";
+      setStatus("articleStatus", "Articolo salvato.", "ok");
+      await loadArticles();
+      renderAll();
+    }
+
+    function addPurchaseRow() {
+      state.purchaseEditorRows.push({
+        id: makeLocalId(),
+        article_id: "",
+        quantity: "",
+        purchase_price_net: "",
+        sale_price_net: ""
+      });
+      renderPurchaseEditorRows();
+    }
+
+    function updatePurchaseEditorRow(id, field, value) {
+      const row = state.purchaseEditorRows.find(r => r.id === id);
+      if (!row) return;
+      row[field] = value;
+    }
+
+    function removePurchaseEditorRow(id) {
+      state.purchaseEditorRows = state.purchaseEditorRows.filter(r => r.id !== id);
+      renderPurchaseEditorRows();
+    }
+
+    async function savePurchase() {
+      setStatus("purchaseStatus", "Salvataggio carico...");
+      const supplier_id = document.getElementById("purchaseSupplier").value;
+      const date = document.getElementById("purchaseDate").value;
+      const document_number = document.getElementById("purchaseDocument").value.trim() || null;
+      const validRows = state.purchaseEditorRows.filter(r => r.article_id && Number(r.quantity) > 0);
+
+      if (!supplier_id) {
+        setStatus("purchaseStatus", "Seleziona il fornitore.", "error");
+        return;
+      }
+      if (validRows.length === 0) {
+        setStatus("purchaseStatus", "Inserisci almeno una riga valida.", "error");
+        return;
+      }
+
+      const total_net = validRows.reduce((acc, r) => acc + Number(r.quantity || 0) * Number(r.purchase_price_net || 0), 0);
+
+      const { data: purchase, error: purchaseError } = await supabaseClient
+        .from("purchase_history")
+        .insert({ date, supplier_id, document_number, total_net })
+        .select("*")
+        .single();
+
+      if (purchaseError) {
+        setStatus("purchaseStatus", purchaseError.message, "error");
+        return;
+      }
+
+      const rowsPayload = validRows.map(r => {
+        const article = state.articles.find(a => a.id === r.article_id);
+        return {
+          purchase_history_id: purchase.id,
+          article_id: r.article_id,
+          code: article?.code || "",
+          description: article?.description || "",
+          quantity: Number(r.quantity || 0),
+          purchase_price_net: Number(r.purchase_price_net || 0),
+          sale_price_net: Number(r.sale_price_net || 0),
+          total_net: Number(r.quantity || 0) * Number(r.purchase_price_net || 0)
+        };
+      });
+
+      const { error: rowsError } = await supabaseClient.from("purchase_history_rows").insert(rowsPayload);
+      if (rowsError) {
+        setStatus("purchaseStatus", rowsError.message, "error");
+        return;
+      }
+
+      for (const r of validRows) {
+        const article = state.articles.find(a => a.id === r.article_id);
+        if (!article) continue;
+        const { error } = await supabaseClient
+          .from("articles")
+          .update({
+            stock: Number(article.stock || 0) + Number(r.quantity || 0),
+            purchase_price_net: Number(r.purchase_price_net || article.purchase_price_net || 0),
+            sale_price_net: Number(r.sale_price_net || article.sale_price_net || 0),
+            last_supplier_id: supplier_id,
+            last_purchase_date: date
+          })
+          .eq("id", article.id);
+
+        if (error) {
+          setStatus("purchaseStatus", error.message, "error");
+          return;
+        }
+      }
+
+      state.purchaseEditorRows = [];
+      document.getElementById("purchaseSupplier").value = "";
+      document.getElementById("purchaseDocument").value = "";
+      document.getElementById("purchaseDate").value = new Date().toISOString().slice(0,10);
+      setStatus("purchaseStatus", "Carico merce salvato.", "ok");
+      await Promise.all([loadArticles(), loadPurchases(), loadPurchaseRowsHistory()]);
+      renderAll();
+    }
+
+    function addArticleToJob(articleId) {
+      const article = state.articles.find(a => a.id === articleId);
+      if (!article) return;
+      state.jobEditorRows.push({
+        id: makeLocalId(),
+        row_type: "articolo_magazzino",
+        article_id: article.id,
+        operator_id: null,
+        operator_name: "",
+        description: article.description,
+        quantity: 1,
+        purchase_price_net: Number(article.purchase_price_net || 0),
+        sale_price_net: Number(article.sale_price_net || 0),
+        supplier_id: article.last_supplier_id || null,
+        last_purchase_date: article.last_purchase_date || null
+      });
+      document.getElementById("jobArticleSearch").value = "";
+      renderJobMatches();
+      renderJobEditorRows();
+      renderJobSummary();
+    }
+
+    function addLaborRow() {
+      const operatorId = document.getElementById("jobOperator").value;
+      const operator = state.operators.find(o => o.id === operatorId);
+      state.jobEditorRows.push({
+        id: makeLocalId(),
+        row_type: "manodopera",
+        article_id: null,
+        operator_id: operator?.id || null,
+        operator_name: operator?.name || "",
+        description: "Manodopera",
+        quantity: 1,
+        purchase_price_net: Number(operator?.hourly_cost || 0),
+        sale_price_net: 35,
+        supplier_id: null,
+        last_purchase_date: null
+      });
+      renderJobEditorRows();
+      renderJobSummary();
+    }
+
+    function updateJobEditorRow(id, field, value) {
+      const row = state.jobEditorRows.find(r => r.id === id);
+      if (!row) return;
+      if (field === "quantity" || field === "purchase_price_net" || field === "sale_price_net") {
+        row[field] = Number(value || 0);
+      } else {
+        row[field] = value;
+      }
+      renderJobSummary();
+    }
+
+    function removeJobEditorRow(id) {
+      state.jobEditorRows = state.jobEditorRows.filter(r => r.id !== id);
+      renderJobEditorRows();
+      renderJobSummary();
+    }
+
+    async function saveJob() {
+      setStatus("jobStatus", "Salvataggio commessa...");
+      const client_id = document.getElementById("jobClient").value;
+      const vehicle_id = document.getElementById("jobType").value === "riparazione" ? (document.getElementById("jobVehicle").value || null) : null;
+      const type = document.getElementById("jobType").value;
+      if (!client_id) {
+        setStatus("jobStatus", "Seleziona il cliente.", "error");
+        return;
+      }
+      if (state.jobEditorRows.length === 0) {
+        setStatus("jobStatus", "Inserisci almeno una riga in commessa.", "error");
+        return;
+      }
+
+      const imponibile = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * Number(row.sale_price_net || 0), 0);
+      const vat = imponibile * IVA_DEFAULT / 100;
+      const total_gross = imponibile + vat;
+      const margin = state.jobEditorRows.reduce((acc, row) => acc + Number(row.quantity || 0) * (Number(row.sale_price_net || 0) - Number(row.purchase_price_net || 0)), 0);
+      const number = `${new Date().getFullYear()}-${String(state.jobs.length + 1).padStart(4,"0")}`;
+
+      const { data: job, error: jobError } = await supabaseClient
+        .from("jobs")
+        .insert({
+          number,
+          date: new Date().toISOString().slice(0,10),
+          type,
+          status: "chiusa",
+          client_id,
+          vehicle_id,
+          imponibile,
+          vat,
+          total_gross,
+          margin,
+          closed_at: new Date().toISOString()
+        })
+        .select("*")
+        .single();
+
+      if (jobError) {
+        setStatus("jobStatus", jobError.message, "error");
+        return;
+      }
+
+      const rowsPayload = state.jobEditorRows.map(r => ({
+        job_id: job.id,
+        row_type: r.row_type,
+        article_id: r.article_id,
+        operator_id: r.operator_id,
+        operator_name: r.operator_name || null,
+        description: r.description,
+        quantity: Number(r.quantity || 0),
+        purchase_price_net: Number(r.purchase_price_net || 0),
+        sale_price_net: Number(r.sale_price_net || 0),
+        supplier_id: r.supplier_id,
+        last_purchase_date: r.last_purchase_date
+      }));
+
+      const { error: rowsError } = await supabaseClient.from("job_rows").insert(rowsPayload);
+      if (rowsError) {
+        setStatus("jobStatus", rowsError.message, "error");
+        return;
+      }
+
+      document.getElementById("jobClient").value = "";
+      document.getElementById("jobVehicle").value = "";
+      document.getElementById("jobOperator").value = "";
+      document.getElementById("jobArticleSearch").value = "";
+      state.jobEditorRows = [];
+      setStatus("jobStatus", "Commessa salvata.", "ok");
+      await Promise.all([loadJobs(), loadJobRowsHistory()]);
+      renderAll();
+      switchTab("jobHistory");
+    }
+
+    function exportSnapshot() {
+      const payload = {
+        clients: state.clients,
+        suppliers: state.suppliers,
+        vehicles: state.vehicles,
+        operators: state.operators,
+        articles: state.articles,
+        jobs: state.jobs,
+        purchases: state.purchases
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `car-agri-export-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("loginBtn").addEventListener("click", login);
+    document.getElementById("registerBtn").addEventListener("click", registerUser);
+    document.getElementById("logoutBtn").addEventListener("click", logout);
+    document.getElementById("refreshAllBtn").addEventListener("click", refreshAll);
+    document.getElementById("exportBtn").addEventListener("click", exportSnapshot);
+
+    document.getElementById("saveClientBtn").addEventListener("click", saveClient);
+    document.getElementById("saveSupplierBtn").addEventListener("click", saveSupplier);
+    document.getElementById("saveVehicleBtn").addEventListener("click", saveVehicle);
+    document.getElementById("saveOperatorBtn").addEventListener("click", saveOperator);
+    document.getElementById("saveArticleBtn").addEventListener("click", saveArticle);
+
+    document.getElementById("addPurchaseRowBtn").addEventListener("click", addPurchaseRow);
+    document.getElementById("savePurchaseBtn").addEventListener("click", savePurchase);
+
+    document.getElementById("purchaseFilterMonth").addEventListener("change", renderPurchaseHistory);
+    document.getElementById("purchaseFilterSupplier").addEventListener("change", renderPurchaseHistory);
+
+    document.getElementById("jobClient").addEventListener("change", renderJobSelectors);
+    document.getElementById("jobType").addEventListener("change", renderJobSelectors);
+    document.getElementById("jobArticleSearch").addEventListener("input", renderJobMatches);
+    document.getElementById("addLaborRowBtn").addEventListener("click", addLaborRow);
+    document.getElementById("saveJobBtn").addEventListener("click", saveJob);
+
+    window.updatePurchaseEditorRow = updatePurchaseEditorRow;
+    window.removePurchaseEditorRow = removePurchaseEditorRow;
+    window.addArticleToJob = addArticleToJob;
+    window.updateJobEditorRow = updateJobEditorRow;
+    window.removeJobEditorRow = removeJobEditorRow;
+
+    boot();
+  </script>
+</body>
+</html>
