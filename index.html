@@ -1115,7 +1115,18 @@ function editClient(id) {
         setStatus("clientStatus", "Inserisci il nome cliente.", "error");
         return;
       }
-      const { error } = await supabaseClient.from("clients").insert(payload);
+      const { error } = let error;
+
+if (editingClientId) {
+  ({ error } = await supabaseClient
+    .from("clients")
+    .update(payload)
+    .eq("id", editingClientId));
+} else {
+  ({ error } = await supabaseClient
+    .from("clients")
+    .insert(payload));
+}
       if (error) {
         setStatus("clientStatus", error.message, "error");
         return;
